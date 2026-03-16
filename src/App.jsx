@@ -246,28 +246,25 @@ function getOddsShift(prevSim,newSim){
 
 /* ─── AUTO-BRACKET GENERATOR ─── */
 function generateBracket(mode="chalk"){
-  // mode: "chalk" (always pick favorite), "balanced" (pick some upsets), "chaos" (heavy upsets)
-  const upsetThresh=mode==="chalk"?0.0:mode==="balanced"?0.35:0.55;
   const picks={};
+  const regionChamps={};
   Object.entries(MO).forEach(([rk,matchups])=>{
     // R64
     const r1=matchups.map(([a,b],i)=>{
       const wp=getWP(a,b);const fav=wp>=0.5?a:b;const dog=wp>=0.5?b:a;
       const upProb=1-Math.max(wp,1-wp);
-      // In balanced/chaos, pick upsets where underdog has a real shot
       let pick=fav;
-      if(mode==="balanced"&&upProb>=0.30&&upProb<0.48&&T[dog].s>=9&&T[dog].s<=12)pick=dog;
+      if(mode==="balanced"&&upProb>=0.30&&T[dog].s>=9&&T[dog].s<=12)pick=dog;
       if(mode==="balanced"&&upProb>=0.38&&T[dog].s>=10)pick=dog;
       if(mode==="chaos"&&upProb>=0.22)pick=dog;
-      if(mode==="chaos"&&upProb>=0.35)pick=dog;
-      // Use specific upset intelligence
+      // Injury-driven upset intelligence
       if(mode!=="chalk"){
-        if(dog==="VCU"&&T["UNC"].inj)pick=dog; // VCU over injured UNC
+        if(dog==="VCU"&&T["UNC"].inj)pick=dog;
         if(dog==="Akron"&&T["Texas Tech"].inj?.includes("Toppin"))pick=dog;
         if(dog==="S. Florida"&&T["Louisville"].inj)pick=dog;
         if(dog==="Miami OH"&&T["Miami OH"].rec==="31-1"&&mode==="chaos")pick=dog;
         if(dog==="High Point"&&mode==="chaos")pick=dog;
-        if(dog==="Saint Louis"&&T["Saint Louis"].rec==="28-5")pick=dog; // SLU underseeded
+        if(dog==="Saint Louis"&&T["Saint Louis"].rec==="28-5")pick=dog;
         if(dog==="Santa Clara"&&T["Santa Clara"].off>=70&&mode!=="chalk")pick=dog;
       }
       picks[`${rk}-0-${i}`]=pick;
@@ -277,10 +274,9 @@ function generateBracket(mode="chalk"){
     const r2=[];
     for(let i=0;i<r1.length;i+=2){
       const wp=getWP(r1[i],r1[i+1]);const fav=wp>=0.5?r1[i]:r1[i+1];const dog=wp>=0.5?r1[i+1]:r1[i];
-      const upProb=1-Math.max(wp,1-wp);
       let pick=fav;
-      if(mode==="balanced"&&upProb>=0.38)pick=dog;
-      if(mode==="chaos"&&upProb>=0.28)pick=dog;
+      if(mode==="balanced"&&(1-Math.max(wp,1-wp))>=0.38)pick=dog;
+      if(mode==="chaos"&&(1-Math.max(wp,1-wp))>=0.28)pick=dog;
       picks[`${rk}-1-${Math.floor(i/2)}`]=pick;
       r2.push(pick);
     }
@@ -288,9 +284,8 @@ function generateBracket(mode="chalk"){
     const s16=[];
     for(let i=0;i<r2.length;i+=2){
       const wp=getWP(r2[i],r2[i+1]);const fav=wp>=0.5?r2[i]:r2[i+1];const dog=wp>=0.5?r2[i+1]:r2[i];
-      const upProb=1-Math.max(wp,1-wp);
       let pick=fav;
-      if(mode==="chaos"&&upProb>=0.35)pick=dog;
+      if(mode==="chaos"&&(1-Math.max(wp,1-wp))>=0.35)pick=dog;
       picks[`${rk}-2-${Math.floor(i/2)}`]=pick;
       s16.push(pick);
     }
@@ -299,7 +294,30 @@ function generateBracket(mode="chalk"){
     let pick=fav;
     if(mode==="chaos"&&(1-Math.max(wp,1-wp))>=0.38)pick=dog;
     picks[`${rk}-3-0`]=pick;
+    regionChamps[rk]=pick;
   });
+  // Final Four: East vs South, West vs Midwest
+  const semi1A=regionChamps["E"],semi1B=regionChamps["S"];
+  const semi2A=regionChamps["W"],semi2B=regionChamps["MW"];
+  if(semi1A&&semi1B){
+    const wp=getWP(semi1A,semi1B);const fav=wp>=0.5?semi1A:semi1B;const dog=wp>=0.5?semi1B:semi1A;
+    let pick=fav;
+    if(mode==="chaos"&&(1-Math.max(wp,1-wp))>=0.40)pick=dog;
+    picks["F4-0"]=pick;
+  }
+  if(semi2A&&semi2B){
+    const wp=getWP(semi2A,semi2B);const fav=wp>=0.5?semi2A:semi2B;const dog=wp>=0.5?semi2B:semi2A;
+    let pick=fav;
+    if(mode==="chaos"&&(1-Math.max(wp,1-wp))>=0.40)pick=dog;
+    picks["F4-1"]=pick;
+  }
+  // Championship
+  if(picks["F4-0"]&&picks["F4-1"]){
+    const wp=getWP(picks["F4-0"],picks["F4-1"]);const fav=wp>=0.5?picks["F4-0"]:picks["F4-1"];const dog=wp>=0.5?picks["F4-1"]:picks["F4-0"];
+    let pick=fav;
+    if(mode==="chaos"&&(1-Math.max(wp,1-wp))>=0.42)pick=dog;
+    picks["CHAMP"]=pick;
+  }
   return picks;
 }
 
@@ -384,7 +402,7 @@ const CSS=`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,op
   --r:10px;--mw:840px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--bg);color:var(--t);-webkit-font-smoothing:antialiased}
+html,body{background:var(--bg);color:var(--t);-webkit-font-smoothing:antialiased;overflow-x:hidden}
 @keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
 @keyframes liveDot{0%,100%{box-shadow:0 0 3px var(--green),0 0 6px var(--green);transform:scale(1);opacity:1}50%{box-shadow:0 0 10px var(--green),0 0 25px var(--green),0 0 40px rgba(47,189,96,0.3);transform:scale(1.3);opacity:0.85}}
@@ -401,6 +419,18 @@ select,button,input{font-family:'DM Sans',sans-serif}
 ::selection{background:rgba(20,147,255,0.3)}
 .pill{display:inline-flex;align-items:center;padding:3px 8px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:0.5px}
 .tag{display:inline-block;padding:2px 7px;border-radius:3px;font-size:8px;font-weight:700;letter-spacing:0.3px}
+button{transition:all 0.15s ease!important}
+button:hover:not(:disabled){filter:brightness(1.15);transform:translateY(-1px)}
+button:active:not(:disabled){transform:translateY(0px);filter:brightness(0.95)}
+button:disabled{opacity:0.5;cursor:not-allowed!important}
+.btn-primary{background:var(--acc)!important;color:#fff!important;border:none!important;font-weight:700!important;box-shadow:0 2px 8px rgba(20,147,255,0.2)}
+.btn-primary:hover{box-shadow:0 4px 16px rgba(20,147,255,0.35)}
+.btn-green{background:var(--green)!important;color:#000!important;border:none!important;font-weight:700!important;box-shadow:0 2px 8px rgba(47,189,96,0.2)}
+.btn-green:hover{box-shadow:0 4px 16px rgba(47,189,96,0.35)}
+.btn-red{background:var(--red)!important;color:#fff!important;border:none!important;font-weight:700!important;box-shadow:0 2px 8px rgba(229,69,61,0.2)}
+.btn-red:hover{box-shadow:0 4px 16px rgba(229,69,61,0.35)}
+.btn-outline{background:var(--s2)!important;color:#fff!important;border:1px solid var(--b2)!important;font-weight:600!important}
+.btn-outline:hover{background:var(--s3)!important;border-color:rgba(255,255,255,0.2)!important}
 `;
 
 export default function App(){
@@ -429,6 +459,7 @@ export default function App(){
   const [prevSim,setPrevSim]=useState(null);
   const [oddsShifts,setOddsShifts]=useState([]);
   const [pathAlerts,setPathAlerts]=useState([]);
+  const [modal,setModal]=useState(null);
 
   useEffect(()=>{
     (()=>{try{const v=localStorage.getItem("mm26-br");if(v)setBrackets(JSON.parse(v));}catch(e){}})();
@@ -504,8 +535,10 @@ Respond ONLY with JSON (no backticks):
           messages:[{role:"user",content:prompt}]})});
       const d=await res.json();
       const txt=d.content?.filter(b=>b.type==="text").map(b=>b.text).join("")||"";
-      const clean=txt.replace(/```json|```/g,"").trim();
-      const data={...JSON.parse(clean),ts:Date.now()};
+      const clean=txt.replace(/```json|```/g,"").replace(/<\/?antml:cite[^>]*>/g,"").replace(/<\/?cite[^>]*>/g,"").trim();
+      // Strip any remaining HTML-like tags from all string values
+      const stripTags=(obj)=>{if(!obj)return obj;if(typeof obj==="string")return obj.replace(/<[^>]+>/g,"").trim();if(Array.isArray(obj))return obj.map(stripTags);if(typeof obj==="object"){const r={};Object.entries(obj).forEach(([k,v])=>{r[k]=stripTags(v);});return r;}return obj;};
+      const data={...stripTags(JSON.parse(clean)),ts:Date.now()};
       setBriefing(data);
       try{localStorage.setItem("mm26-brief",JSON.stringify(data));}catch(e){}
     }catch(e){
@@ -657,7 +690,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
       });
       const d=await res.json();
       const txt=d.content?.filter(b=>b.type==="text").map(b=>b.text).join("")||"";
-      const clean=txt.replace(/```json|```/g,"").trim();
+      const clean=txt.replace(/```json|```/g,"").replace(/<[^>]+>/g,"").trim();
       try{
         const data=JSON.parse(clean);
         setFetchMsg(`Status: ${data.status} | ${data.last_updated||"Updated just now"}`);
@@ -719,7 +752,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
     try{
       const res=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,messages:[{role:"user",content:prompt}]})});
       const d=await res.json();const txt=d.content?.find(b=>b.type==="text")?.text||"";
-      setAiRes(JSON.parse(txt.replace(/```json|```/g,"").trim()));
+      setAiRes(JSON.parse(txt.replace(/```json|```/g,"").replace(/<[^>]+>/g,"").trim()));
     }catch(e){setAiRes({winner:cmpA,winPct:Math.round(getWP(cmpA,cmpB)*100),keyMatchup:"AI unavailable — using model ratings.",styleFactor:"N/A",starWatch:"N/A",upsetRecipe:"N/A",injury_impact:"N/A",prediction:`${cmpA} wins based on composite power.`});}
     setAiLoading(false);
   },[cmpA,cmpB]);
@@ -758,10 +791,10 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
       {/* TABS */}
       <div style={{background:"var(--bg)",borderBottom:"2px solid var(--b)",position:"sticky",top:0,zIndex:50}}>
-        <div className="wrap" style={{display:"flex",overflowX:"auto",WebkitOverflowScrolling:"touch",gap:0,padding:"0 20px"}}>
+        <div className="wrap" style={{display:"flex",flexWrap:"wrap",gap:0,padding:"0 12px"}}>
           {TABS.map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)} style={{
-              flex:"0 0 auto",padding:"12px 16px",fontSize:12,fontWeight:700,letterSpacing:0.6,
+              flex:"1 0 auto",padding:"10px 10px",fontSize:11,fontWeight:700,letterSpacing:0.4,
               background:"transparent",color:tab===t.id?"#fff":"var(--m)",
               borderBottom:tab===t.id?"2px solid var(--acc)":"2px solid transparent",
               border:"none",borderTop:"none",borderLeft:"none",borderRight:"none",
@@ -796,7 +829,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   {briefLoading&&<div style={{width:12,height:12,borderRadius:5,border:"2px solid var(--b)",borderTopColor:"var(--acc)",animation:"spin 0.8s linear infinite"}}/>}
-                  <button onClick={generateBriefing} disabled={briefLoading} style={{padding:"6px 12px",borderRadius:7,fontSize:12,fontWeight:600,background:"var(--s2)",color:"var(--m)",border:"1px solid var(--b)",cursor:"pointer",fontFamily:"'DM Sans'"}}>
+                  <button onClick={generateBriefing} disabled={briefLoading} className="btn-outline" style={{padding:"6px 14px",borderRadius:7,fontSize:12,fontFamily:"'DM Sans'",cursor:"pointer"}}>
                     {briefLoading?"Updating...":"Refresh"}
                   </button>
                 </div>
@@ -830,7 +863,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                 {brackets.map((b,i)=>{
                   let cor=0,wrg=0,pts=0;const rp={0:10,1:20,2:40,3:80,4:160,5:320};
                   Object.entries(b.picks).forEach(([k,pk])=>{const rd=parseInt(k.split("-")[1]);if(results[k]){if(results[k]===pk){cor++;pts+=(rp[rd]||10);}else wrg++;}});
-                  const total=Object.keys(b.picks).length;const filled=total>=50;
+                  const total=Object.keys(b.picks).length;const filled=total>=63;
                   return(
                     <div key={i} style={{padding:14,borderRadius:8,background:"var(--s2)",textAlign:"center",border:"1px solid var(--b)"}}>
                       <div style={{fontSize:15,fontWeight:700,color:"#fff"}}>{b.name}</div>
@@ -974,7 +1007,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             <p style={{fontSize:14,color:"var(--m)",marginBottom:20,lineHeight:1.5}}>
               Auto-pilot will search the web for the latest scores, injuries, and news, then generate a personalized briefing based on your brackets.
             </p>
-            <button onClick={generateBriefing} style={{padding:"14px 32px",borderRadius:8,fontSize:15,fontWeight:700,background:"var(--acc)",color:"#fff",border:"none",cursor:"pointer",fontFamily:"'DM Sans'"}}>
+            <button onClick={generateBriefing} className="btn-primary" style={{padding:"14px 32px",borderRadius:8,fontSize:15,fontFamily:"'DM Sans'",cursor:"pointer"}}>
               Generate Briefing
             </button>
           </div>
@@ -1004,40 +1037,40 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             {matchups.map(([a,b],i)=>{
               const pred=getGamePrediction(a,b);if(!pred)return null;
               return(
-                <div key={i} className="gl" style={{padding:16,marginBottom:20,borderLeft:`3px solid ${pred.confColor}`}}>
+                <div key={i} className="gl" style={{padding:16,marginBottom:12,borderLeft:`3px solid ${pred.confColor}`}}>
                   {/* Matchup header */}
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
-                    <div style={{flex:1}}>
-                      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:4}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:12}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
                         <span style={{fontSize:13,fontWeight:800,color:RC[rk]}}>({T[a].s})</span>
                         <span style={{fontSize:15,fontWeight:pred.winner===a?900:500,color:pred.winner===a?"#fff":"var(--m)"}}>{a}</span>
-                        <span style={{fontSize:14,color:"var(--d)"}}>vs</span>
+                        <span style={{fontSize:13,color:"var(--d)"}}>vs</span>
                         <span style={{fontSize:13,fontWeight:800,color:RC[rk]}}>({T[b].s})</span>
                         <span style={{fontSize:15,fontWeight:pred.winner===b?900:500,color:pred.winner===b?"#fff":"var(--m)"}}>{b}</span>
                       </div>
-                      <div style={{fontSize:14,color:"var(--m)"}}>{T[a].rec} {T[a].c} vs {T[b].rec} {T[b].c}</div>
+                      <div style={{fontSize:12,color:"var(--m)"}}>{T[a].rec} {T[a].c} vs {T[b].rec} {T[b].c}</div>
                     </div>
-                    <div style={{textAlign:"center",flexShrink:0}}>
-                      <div style={{fontSize:15,fontWeight:700,letterSpacing:1,color:pred.confColor,padding:"1px 6px",borderRadius:5,background:`${pred.confColor}15`,border:`1px solid ${pred.confColor}30`}}>{pred.conf}</div>
+                    <div style={{flexShrink:0}}>
+                      <div style={{fontSize:11,fontWeight:700,letterSpacing:0.5,color:pred.confColor,padding:"4px 10px",borderRadius:5,background:`${pred.confColor}15`,border:`1px solid ${pred.confColor}30`,whiteSpace:"nowrap"}}>{pred.conf}</div>
                     </div>
                   </div>
 
                   {/* Pick */}
-                  <div style={{display:"flex",alignItems:"center",gap:12,padding:"8px 10px",borderRadius:8,background:"rgba(255,255,255,0.03)",marginBottom:20}}>
-                    <div style={{width:38,height:38,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:`${pred.confColor}20`,border:`1px solid ${pred.confColor}40`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,background:"rgba(255,255,255,0.03)",marginBottom:12}}>
+                    <div style={{width:40,height:40,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:`${pred.confColor}15`,border:`1px solid ${pred.confColor}30`,flexShrink:0}}>
                       <span className="mn" style={{fontSize:15,fontWeight:800,color:pred.confColor}}>{pred.winPct}</span>
                     </div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:16,fontWeight:900,color:"#fff"}}>PICK: {pred.winner}</div>
-                      <div style={{fontSize:14,color:"var(--m)"}}>({T[pred.winner].s}) seed · {T[pred.winner].rec} · {T[pred.winner].c}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:15,fontWeight:900,color:"#fff"}}>PICK: {pred.winner}</div>
+                      <div style={{fontSize:12,color:"var(--m)"}}>({T[pred.winner].s}) seed · {T[pred.winner].rec} · {T[pred.winner].c}</div>
                     </div>
-                    <div style={{fontSize:14,color:pred.confColor,fontWeight:700}}>{pred.winPct}% WIN</div>
+                    <div style={{fontSize:13,color:pred.confColor,fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>{pred.winPct}% WIN</div>
                   </div>
 
                   {/* Reasoning */}
                   <div style={{marginBottom:pred.upsetAngle?6:0}}>
                     {pred.reasons.map((r,ri)=>(
-                      <div key={ri} style={{display:"flex",gap:5,padding:"2px 0"}}>
+                      <div key={ri} style={{display:"flex",gap:5,padding:"3px 0"}}>
                         <span style={{color:pred.confColor,fontSize:14,fontWeight:800,flexShrink:0}}>→</span>
                         <span style={{fontSize:14,color:"rgba(255,255,255,0.6)",lineHeight:1.4}}>{r}</span>
                       </div>
@@ -1086,26 +1119,25 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
         <div style={{display:"grid",gridTemplateColumns:"1fr",gap:12,marginBottom:20}}>
           {[
-            {mode:"chalk",name:"Chalk",desc:"Always pick the favorite. Safest bracket — maximizes correct picks in early rounds. Best for small pools.",color:"var(--acc)",upsets:"0-2 upsets"},
-            {mode:"balanced",name:"Balanced",desc:"Smart upsets only — targets games with real edges: injuries, under-seeding, style mismatches. Best for 10-50 person pools.",color:"var(--green)",upsets:"5-8 upsets"},
-            {mode:"chaos",name:"Upset Heavy",desc:"Maximum chaos — picks every live upset, targets Cinderellas, fades injured teams. Best for 100+ person pools.",color:"var(--red)",upsets:"12-18 upsets"},
-          ].map(({mode,name,desc,color,upsets})=>(
+            {mode:"chalk",name:"Chalk",desc:"Always pick the favorite. Safest bracket — maximizes correct picks in early rounds. Best for small pools.",color:"var(--acc)",btnClass:"btn-primary",upsets:"0-2 upsets"},
+            {mode:"balanced",name:"Balanced",desc:"Smart upsets only — targets games with real edges: injuries, under-seeding, style mismatches. Best for 10-50 person pools.",color:"var(--green)",btnClass:"btn-green",upsets:"5-8 upsets"},
+            {mode:"chaos",name:"Upset Heavy",desc:"Maximum chaos — picks every live upset, targets Cinderellas, fades injured teams. Best for 100+ person pools.",color:"var(--red)",btnClass:"btn-red",upsets:"12-18 upsets"},
+          ].map(({mode,name,desc,color,btnClass,upsets})=>(
             <div key={mode} className="gl" style={{padding:18,borderLeft:`3px solid ${color}`}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
-                <div>
-                  <div style={{fontSize:15,fontWeight:700,color:"#fff"}}>{name}</div>
-                  <div style={{fontSize:13,color:"var(--m)",lineHeight:1.5,marginTop:5,maxWidth:320}}>{desc}</div>
-                  <div className="mn" style={{fontSize:14,color,fontWeight:600,marginTop:4}}>{upsets}</div>
-                </div>
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:15,fontWeight:700,color:"#fff"}}>{name}</div>
+                <div style={{fontSize:13,color:"var(--m)",lineHeight:1.5,marginTop:5}}>{desc}</div>
+                <div className="mn" style={{fontSize:13,color,fontWeight:600,marginTop:6}}>{upsets}</div>
               </div>
-              <button onClick={()=>{
+              <button className={btnClass} onClick={()=>{
                 const newPicks=generateBracket(mode);
                 const nb=[...brackets];
                 const targetIdx=mode==="chalk"?0:mode==="balanced"?1:2;
                 nb[targetIdx]={...nb[targetIdx],picks:newPicks};
                 save(nb);
-              }} style={{width:"100%",padding:"10px",borderRadius:8,fontSize:15,fontWeight:700,background:`${color}`,color:"#000",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",marginTop:4}}>
-                Generate & Save to "{name}" Bracket →
+              }} style={{width:"100%",padding:"12px",borderRadius:8,fontSize:14,fontFamily:"'DM Sans'",cursor:"pointer",letterSpacing:0.2}}>
+                Generate {name} Bracket
+              </button>
               </button>
             </div>
           ))}
@@ -1115,41 +1147,62 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
         <div className="gl" style={{padding:20,marginBottom:20,textAlign:"center",background:"linear-gradient(135deg,rgba(157,122,255,0.04),rgba(74,158,255,0.04))"}}>
           <div style={{fontSize:13,fontWeight:800,marginBottom:6,letterSpacing:-0.2}}>Generate All 3 Brackets</div>
           <p style={{fontSize:13,color:"var(--m)",marginBottom:20}}>Fill Chalk, Balanced, and Upset Heavy simultaneously — ready for any pool.</p>
-          <button onClick={()=>{
+          <button className="btn-primary" onClick={()=>{
             const nb=[
               {name:"Chalk",picks:generateBracket("chalk")},
               {name:"Balanced",picks:generateBracket("balanced")},
               {name:"Upset Heavy",picks:generateBracket("chaos")},
             ];
             save(nb);
-          }} style={{padding:"14px 40px",borderRadius:8,fontSize:14,fontWeight:700,background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#000",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",letterSpacing:0.2,transition:"all 0.15s"}}>
-            Generate All 3 →
+          }} style={{padding:"14px 40px",borderRadius:8,fontSize:14,fontFamily:"'DM Sans'",cursor:"pointer",letterSpacing:0.2}}>
+            Generate All 3
           </button>
         </div>
 
         {/* Preview generated brackets */}
-        <div style={{fontSize:14,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:20}}>Current Bracket Status</div>
+        <div style={{fontSize:14,fontWeight:700,color:"var(--t2)",marginBottom:20}}>Current Bracket Status</div>
         {brackets.map((b,bi)=>{
           const total=Object.keys(b.picks).length;const score=getBracketScore(b.picks);
           // Get regional champs
           const champs=Object.entries(RG).map(([rk,rn])=>{const k=`${rk}-3-0`;return{reg:rn,team:b.picks[k]||null,color:RC[rk]};});
           return(
-            <div key={bi} className="gl" style={{padding:16,marginBottom:20}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:14,fontWeight:800}}>{b.name}</span>
-                  {score&&<span style={{fontSize:15,fontWeight:700,color:score.color,padding:"1px 6px",borderRadius:5,background:`${score.color}12`}}>{score.profile}</span>}
+            <div key={bi} className="gl" style={{padding:16,marginBottom:16}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <span style={{fontSize:15,fontWeight:800}}>{b.name}</span>
+                  {score&&<span style={{fontSize:11,fontWeight:700,color:score.color,padding:"3px 8px",borderRadius:5,background:`${score.color}12`,whiteSpace:"nowrap"}}>{score.profile}</span>}
                 </div>
-                <span className="mn" style={{fontSize:13,color:total>=60?"var(--green)":"var(--m)"}}>{total}/60</span>
+                <span className="mn" style={{fontSize:13,color:total>=63?"var(--green)":"var(--m)",whiteSpace:"nowrap",marginLeft:8}}>{total}/63</span>
               </div>
               {total>0&&(
-                <div style={{display:"flex",gap:4}}>
-                  {champs.map((ch,ci)=>(
-                    <div key={ci} style={{flex:1,textAlign:"center",padding:"4px",borderRadius:6,background:"rgba(255,255,255,0.02)",border:`1px solid ${ch.color}20`}}>
-                      <div style={{fontSize:13,color:ch.color,fontWeight:700}}>{ch.reg}</div>
-                      <div style={{fontSize:14,fontWeight:800,color:ch.team?"#fff":"var(--d)"}}>{ch.team||"—"}</div>
+                <div style={{marginTop:8}}>
+                  <div style={{display:"flex",gap:4,marginBottom:6}}>
+                    {champs.map((ch,ci)=>(
+                      <div key={ci} style={{flex:1,textAlign:"center",padding:"6px 4px",borderRadius:6,background:"rgba(255,255,255,0.02)",overflow:"hidden",border:`1px solid ${ch.color}20`}}>
+                        <div style={{fontSize:11,color:ch.color,fontWeight:700}}>{ch.reg}</div>
+                        <div style={{fontSize:13,fontWeight:800,color:ch.team?"#fff":"var(--d)"}}>{ch.team||"—"}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* F4 and Champion */}
+                  {b.picks["F4-0"]&&b.picks["F4-1"]&&(
+                    <div style={{display:"flex",gap:4}}>
+                      <div style={{flex:1,textAlign:"center",padding:"6px 4px",borderRadius:6,background:"rgba(255,255,255,0.02)",overflow:"hidden",border:"1px solid var(--b)"}}>
+                        <div style={{fontSize:10,color:"var(--m)"}}>Semi 1</div>
+                        <div style={{fontSize:12,fontWeight:700,color:"#fff"}}>{b.picks["F4-0"]}</div>
+                      </div>
+                      <div style={{flex:1,textAlign:"center",padding:"6px 4px",borderRadius:6,background:"rgba(255,255,255,0.02)",overflow:"hidden",border:"1px solid var(--b)"}}>
+                        <div style={{fontSize:10,color:"var(--m)"}}>Semi 2</div>
+                        <div style={{fontSize:12,fontWeight:700,color:"#fff"}}>{b.picks["F4-1"]}</div>
+                      </div>
+                      {b.picks["CHAMP"]&&(
+                        <div style={{flex:1,textAlign:"center",padding:"6px 4px",borderRadius:6,overflow:"hidden",background:"rgba(20,147,255,0.06)",border:"1px solid rgba(20,147,255,0.2)"}}>
+                          <div style={{fontSize:10,color:"var(--acc)"}}>Champion</div>
+                          <div style={{fontSize:12,fontWeight:800,color:"var(--acc)"}}>{b.picks["CHAMP"]}</div>
+                        </div>
+                      )}
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
@@ -1158,7 +1211,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
         {/* Injury-driven picks */}
         <div className="gl" style={{padding:18,marginTop:8}}>
-          <div style={{fontSize:14,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:20}}>INJURY-DRIVEN UPSET INTELLIGENCE</div>
+          <div style={{fontSize:14,fontWeight:700,color:"var(--t2)",marginBottom:20}}>INJURY-DRIVEN UPSET INTELLIGENCE</div>
           <div style={{fontSize:13,color:"var(--m)",lineHeight:1.6,marginBottom:20}}>
             These injuries are baked into the balanced and upset-heavy bracket generators:
           </div>
@@ -1186,7 +1239,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
           </p>
           <div style={{display:"flex",gap:12,justifyContent:"center",marginBottom:4}}>
             {[1000,5000,10000,25000].map(n=>(
-              <button key={n} onClick={()=>doSim(n)} style={{padding:"11px 22px",borderRadius:8,fontSize:13,fontWeight:700,background:"var(--acc)",color:"#fff",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.12s"}}>{(n/1000)}k</button>
+              <button key={n} onClick={()=>doSim(n)} className="btn-primary" style={{padding:"11px 22px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans'",cursor:"pointer"}}>{(n/1000)}k</button>
             ))}
           </div>
         </div>
@@ -1194,7 +1247,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
         {simR&&(<>
           <div className="gl fu" style={{padding:18,marginBottom:20}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:20}}>
-              <span style={{fontSize:14,fontWeight:700,fontWeight:700,color:"var(--t2)"}}>Championship Win %</span>
+              <span style={{fontSize:14,fontWeight:700,color:"var(--t2)"}}>Championship Win %</span>
               <span className="mn" style={{fontSize:14,color:"var(--d)"}}>{simR.n.toLocaleString()} sims</span>
             </div>
             <ResponsiveContainer width="100%" height={280}>
@@ -1210,7 +1263,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
           </div>
 
           <div className="gl fu" style={{padding:18,marginBottom:20}}>
-            <div style={{fontSize:14,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:20}}>Final Four Rates — Top 12</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t2)",marginBottom:20}}>Final Four Rates — Top 12</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
               {simR.f4.slice(0,12).map(([n,c])=>{const t=T[n];const pct=(c/simR.n*100).toFixed(1);
                 return(<div key={n} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 6px",borderRadius:8,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.04)"}}>
@@ -1224,7 +1277,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
           {/* Upset alerts */}
           <div className="gl fu" style={{padding:14}}>
-            <div style={{fontSize:14,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:20}}>First-Round Upset Alerts</div>
+            <div style={{fontSize:14,fontWeight:700,color:"var(--t2)",marginBottom:20}}>First-Round Upset Alerts</div>
             {Object.entries(MO).flatMap(([rk,ms])=>ms.map(([a,b])=>{const p=getWP(a,b);const up=1-p;if(up<0.28||T[b].s<=8)return null;return{r:rk,fav:a,dog:b,pct:up};}).filter(Boolean)).sort((a,b)=>b.pct-a.pct).slice(0,8).map((u,i)=>(
               <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
                 <div className="mn" style={{fontSize:15,fontWeight:800,color:u.pct>=0.45?"var(--red)":"var(--orange)",width:35,textAlign:"center"}}>{Math.round(u.pct*100)}%</div>
@@ -1249,15 +1302,15 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
         {/* Bracket confidence */}
         {bScore&&(
-          <div className="gl" style={{padding:14,marginBottom:18,display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:50,height:50,borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:`${bScore.color}15`,border:`1px solid ${bScore.color}40`}}>
-              <div style={{fontSize:16,fontWeight:900,color:bScore.color}}>{bScore.profile}</div>
-            </div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:700}}>Bracket Profile: <span style={{color:bScore.color}}>{bScore.profile}</span></div>
-              <div style={{fontSize:14,color:"var(--m)"}}>
+          <div className="gl" style={{padding:14,marginBottom:18,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:"#fff"}}>Bracket Profile</div>
+              <div style={{fontSize:13,color:"var(--m)",marginTop:2}}>
                 {bScore.chalk} chalk / {bScore.upsets} upsets of {bScore.total} picks · {Math.round(bScore.chalkPct*100)}% favorites
               </div>
+            </div>
+            <div style={{padding:"6px 14px",borderRadius:6,background:`${bScore.color}15`,border:`1px solid ${bScore.color}30`,whiteSpace:"nowrap"}}>
+              <span style={{fontSize:13,fontWeight:800,color:bScore.color,letterSpacing:0.5}}>{bScore.profile}</span>
             </div>
           </div>
         )}
@@ -1269,27 +1322,27 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
           ))}
         </div>
 
-        {/* Bracket grid */}
+        {/* Bracket grid — horizontal columns */}
         <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:12}}>
-          <div style={{display:"flex",gap:12,minWidth:600}}>
+          <div style={{display:"flex",gap:8,minWidth:620}}>
             {["R64","R32","S16","E8"].map((label,ri)=>{
               const teams=ri===0?MO[reg].flat():getAdv(reg,ri);
               const pairs=[];for(let i=0;i<teams.length;i+=2)pairs.push([teams[i],teams[i+1]]);
               return(
-                <div key={ri} style={{display:"flex",flexDirection:"column",justifyContent:"space-around",minWidth:135,gap:3,flexShrink:0}}>
-                  <div style={{fontSize:13,fontWeight:700,fontWeight:700,color:"var(--t2)",textAlign:"center",padding:"0 0 3px"}}>{label}</div>
+                <div key={ri} style={{display:"flex",flexDirection:"column",justifyContent:"space-around",minWidth:140,gap:3,flexShrink:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--m)",textAlign:"center",padding:"0 0 4px"}}>{label}</div>
                   {pairs.map(([a,b],pi)=>{
                     const key=`${reg}-${ri}-${pi}`;const picked=brackets[bIdx].picks[key];
                     return(
                       <div key={pi} style={{display:"flex",flexDirection:"column",justifyContent:"center",flex:1,gap:1}}>
                         {[a,b].map((tm,ti)=>{
-                          if(!tm)return <div key={ti} style={{height:26,background:"rgba(255,255,255,0.015)",borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"var(--d)"}}>—</div>;
+                          if(!tm)return <div key={ti} style={{height:30,background:"rgba(255,255,255,0.015)",borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"var(--d)"}}>—</div>;
                           const t=T[tm];const other=ti===0?b:a;const wp=other?getWP(tm,other):1;const sel=picked===tm;
                           return(
-                            <div key={ti} onClick={()=>pick(key,tm)} style={{display:"flex",alignItems:"center",gap:3,padding:"3px 5px",borderRadius:5,cursor:"pointer",background:sel?`${RC[reg]}12`:"rgba(255,255,255,0.015)",border:sel?`1px solid ${RC[reg]}50`:"1px solid rgba(255,255,255,0.03)",transition:"all 0.1s"}}>
-                              <span style={{fontSize:15,fontWeight:800,color:t.s<=4?RC[reg]:"var(--d)",width:12,textAlign:"center"}}>{t.s}</span>
-                              <span style={{fontSize:14,fontWeight:sel?800:600,color:sel?"#fff":"rgba(255,255,255,0.65)",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tm}</span>
-                              <span className="mn" style={{fontSize:13,fontWeight:700,color:wp>=0.6?"var(--green)":"var(--orange)"}}>{Math.round(wp*100)}</span>
+                            <div key={ti} onClick={()=>pick(key,tm)} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 6px",borderRadius:5,cursor:"pointer",background:sel?`${RC[reg]}12`:"rgba(255,255,255,0.015)",border:sel?`1px solid ${RC[reg]}50`:"1px solid rgba(255,255,255,0.03)",transition:"all 0.1s"}}>
+                              <span style={{fontSize:11,fontWeight:800,color:t.s<=4?RC[reg]:"var(--d)",width:16,textAlign:"center"}}>{t.s}</span>
+                              <span style={{fontSize:13,fontWeight:sel?800:500,color:sel?"#fff":"rgba(255,255,255,0.65)",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tm}</span>
+                              <span className="mn" style={{fontSize:11,fontWeight:700,color:wp>=0.6?"var(--green)":"var(--orange)"}}>{Math.round(wp*100)}</span>
                             </div>
                           );
                         })}
@@ -1299,19 +1352,74 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                 </div>
               );
             })}
-            <div style={{display:"flex",flexDirection:"column",justifyContent:"center",minWidth:110}}>
+            {/* Regional Champion */}
+            <div style={{display:"flex",flexDirection:"column",justifyContent:"center",minWidth:120}}>
               {(()=>{const k=`${reg}-3-0`;const w=brackets[bIdx].picks[k];
-                if(!w)return <div className="gl" style={{padding:20,textAlign:"center"}}><div style={{fontSize:14,color:"var(--d)"}}>Complete bracket to see champion</div></div>;
+                if(!w)return <div className="gl" style={{padding:16,textAlign:"center"}}><div style={{fontSize:13,color:"var(--d)"}}>Pick all rounds</div></div>;
                 const t=T[w];
-                return <div className="gl" style={{padding:16,textAlign:"center",borderColor:`${RC[reg]}40`}}>
-                  <div style={{fontSize:15,fontWeight:700,color:RC[reg],letterSpacing:1,textTransform:"uppercase"}}>{RG[reg]} Champ</div>
-                  <div style={{fontSize:20,fontWeight:900,margin:"4px 0"}}>{w}</div>
-                  <div style={{fontSize:14,color:"var(--m)"}}>({t.s}) {t.rec}</div>
+                return <div className="gl" style={{padding:14,textAlign:"center",borderColor:`${RC[reg]}30`}}>
+                  <div style={{fontSize:11,fontWeight:700,color:RC[reg],letterSpacing:0.5}}>{RG[reg]} Champ</div>
+                  <div style={{fontSize:18,fontWeight:900,margin:"4px 0"}}>{w}</div>
+                  <div style={{fontSize:12,color:"var(--m)"}}>({t.s}) {t.rec}</div>
                 </div>;
               })()}
             </div>
           </div>
         </div>
+
+        {/* Final Four & Championship */}
+        {(()=>{
+          const champs=Object.keys(RG).map(rk=>({rk,team:brackets[bIdx].picks[`${rk}-3-0`],color:RC[rk],name:RG[rk]}));
+          const allChamps=champs.every(c=>c.team);
+          if(!allChamps)return null;
+          return(
+            <div style={{marginTop:12}}>
+              <div style={{fontSize:14,fontWeight:700,color:"#fff",marginBottom:10}}>Final Four & Championship</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                {[[champs[0],champs[2]],[champs[1],champs[3]]].map((semi,si)=>{
+                  const f4Key=`F4-${si}`;const picked=brackets[bIdx].picks[f4Key];
+                  return(
+                    <div key={si} className="gl" style={{padding:4}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"var(--m)",textAlign:"center",padding:"4px 0"}}>Semi {si+1}</div>
+                      {semi.map((c,ti)=>{
+                        const sel=picked===c.team;const other=semi[1-ti];
+                        const wp=c.team&&other.team?getWP(c.team,other.team):0.5;
+                        return(
+                          <div key={ti} onClick={()=>{const nb=[...brackets];nb[bIdx]={...nb[bIdx],picks:{...nb[bIdx].picks,[f4Key]:c.team}};save(nb);}} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",cursor:"pointer",background:sel?`${c.color}15`:"transparent",borderBottom:ti===0?"1px solid var(--b)":"none"}}>
+                            <div style={{width:4,height:16,borderRadius:2,background:c.color}}/>
+                            <span style={{fontSize:14,fontWeight:sel?800:500,color:sel?"#fff":"var(--t2)",flex:1}}>{c.team}</span>
+                            <span className="mn" style={{fontSize:12,color:"var(--m)"}}>{Math.round((ti===0?wp:1-wp)*100)}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+              {brackets[bIdx].picks["F4-0"]&&brackets[bIdx].picks["F4-1"]&&(
+                <div className="gl" style={{padding:4,marginBottom:8}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--acc)",textAlign:"center",padding:"6px 0"}}>Championship</div>
+                  {["F4-0","F4-1"].map((f4Key,ti)=>{
+                    const team=brackets[bIdx].picks[f4Key];const champPicked=brackets[bIdx].picks["CHAMP"];const sel=champPicked===team;
+                    const other=brackets[bIdx].picks[ti===0?"F4-1":"F4-0"];const wp=team&&other?getWP(team,other):0.5;
+                    return(
+                      <div key={ti} onClick={()=>{const nb=[...brackets];nb[bIdx]={...nb[bIdx],picks:{...nb[bIdx].picks,CHAMP:team}};save(nb);}} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",cursor:"pointer",background:sel?"rgba(20,147,255,0.08)":"transparent",borderBottom:ti===0?"1px solid var(--b)":"none"}}>
+                        <span style={{fontSize:15,fontWeight:sel?900:500,color:sel?"var(--acc)":"var(--t2)",flex:1}}>{team}</span>
+                        <span className="mn" style={{fontSize:13,color:"var(--m)"}}>{Math.round((ti===0?wp:1-wp)*100)}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {brackets[bIdx].picks["CHAMP"]&&(
+                <div style={{textAlign:"center",padding:18,borderRadius:10,background:"var(--s)",border:"1px solid var(--acc)"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"var(--acc)",letterSpacing:1}}>NATIONAL CHAMPION</div>
+                  <div style={{fontSize:22,fontWeight:900,color:"#fff",margin:"6px 0"}}>{brackets[bIdx].picks["CHAMP"]}</div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>)}
 
       {/* ═══ BETTING VALUE TAB ═══ */}
@@ -1319,7 +1427,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
         {!simR?(
           <div className="gl fu" style={{padding:20,textAlign:"center"}}>
             <p style={{fontSize:14,fontWeight:700,marginBottom:16}}>Run a simulation first to generate betting values</p>
-            <button onClick={()=>{doSim(10000);}} style={{padding:"14px 32px",borderRadius:8,background:"var(--acc)",color:"#fff",border:"none",cursor:"pointer",fontSize:15,fontWeight:700,fontFamily:"'DM Sans'"}}>Run 10k Sims</button>
+            <button onClick={()=>{doSim(10000);}} className="btn-primary" style={{padding:"14px 32px",borderRadius:8,fontSize:15,fontFamily:"'DM Sans'",cursor:"pointer"}}>Run 10k Sims</button>
           </div>
         ):(
           <>
@@ -1337,7 +1445,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               {bettingValues.map((v,i)=>(
                 <div key={v.name} style={{display:"flex",alignItems:"center",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
                   <div style={{flex:2,display:"flex",alignItems:"center",gap:5}}>
-                    <div style={{width:16,height:16,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,background:RC[v.reg],color:"#000"}}>{v.seed}</div>
+                    <div style={{width:22,height:22,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,background:RC[v.reg],color:"#000"}}>{v.seed}</div>
                     <div><div style={{fontSize:13,fontWeight:700}}>{v.name}</div><div style={{fontSize:13,color:"var(--m)"}}>{v.conf} · {v.vegasOdds}</div></div>
                   </div>
                   <span className="mn" style={{width:45,textAlign:"center",fontSize:13,color:"var(--m)"}}>{v.vegasPct.toFixed(1)}%</span>
@@ -1374,7 +1482,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               {allNames.map(t=><option key={t} value={t}>({T[t].s}) {t}</option>)}
             </select>
           </div>
-          <button onClick={runAI} disabled={aiLoading} style={{width:"100%",padding:"10px",borderRadius:8,fontSize:15,fontWeight:700,background:aiLoading?"var(--s2)":"linear-gradient(135deg,#7c8db5,#7c5ce0)",color:aiLoading?"var(--m)":"#fff",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.2s",letterSpacing:0.2}}>
+          <button onClick={runAI} disabled={aiLoading} className={aiLoading?"btn-outline":"btn-primary"} style={{width:"100%",padding:"12px",borderRadius:8,fontSize:14,fontFamily:"'DM Sans'",cursor:"pointer",letterSpacing:0.2}}>
             {aiLoading?"Analyzing matchup...":"Run AI Analysis →"}
           </button>
         </div>
@@ -1517,7 +1625,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               </div>
               <div style={{fontSize:14,color:"var(--m)",marginTop:5,paddingLeft:11}}>Web-search powered · Manual entry · Auto-scoring</div>
             </div>
-            <button onClick={fetchLatest} disabled={fetchLoading} style={{padding:"9px 18px",borderRadius:8,fontSize:13,fontWeight:700,background:fetchLoading?"var(--s2)":"linear-gradient(135deg,var(--green),#2bb870)",color:fetchLoading?"var(--m)":"#000",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.15s",letterSpacing:0.2}}>
+            <button onClick={fetchLatest} disabled={fetchLoading} className={fetchLoading?"btn-outline":"btn-green"} style={{padding:"10px 20px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans'",cursor:"pointer"}}>
               {fetchLoading?"Searching...":"Fetch Scores →"}
             </button>
           </div>
@@ -1526,7 +1634,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
         {/* Bracket Scoreboard */}
         <div className="gl fu" style={{padding:18,marginBottom:20}}>
-          <div style={{fontSize:14,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:20}}>Bracket Scoreboard</div>
+          <div style={{fontSize:14,fontWeight:700,color:"var(--t2)",marginBottom:20}}>Bracket Scoreboard</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
             {brackets.map((b,i)=>{
               const sc=scoreBracket(b.picks);const totalResults=Object.keys(results).length;
@@ -1602,23 +1710,23 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                   </div>
                   <div style={{display:"flex",gap:4}}>
                     {/* Team A */}
-                    <div onClick={()=>{const m=prompt(`${g.a} wins by how many points? (Enter number, or leave blank to skip margin)`);markResult(g.key,g.a,m?parseInt(m)||null:null);}} style={{flex:1,padding:"8px",borderRadius:8,cursor:"pointer",textAlign:"center",
+                    <div onClick={()=>setModal({type:"margin",data:{key:g.key,team:g.a,other:g.b}})} style={{flex:1,padding:"10px 8px",borderRadius:8,cursor:"pointer",textAlign:"center",
                       background:result===g.a?"rgba(47,189,96,0.1)":!result?"rgba(255,255,255,0.02)":"rgba(229,69,61,0.05)",
                       border:result===g.a?"1px solid rgba(47,189,96,0.25)":!result?"1px solid var(--b)":"1px solid rgba(229,69,61,0.12)",
                       transition:"all 0.15s"}}>
-                      <div style={{fontSize:14,fontWeight:800,color:RC[ta?.r||g.region]}}>({ta?.s})</div>
-                      <div style={{fontSize:26,fontWeight:result===g.a?900:600,color:result===g.a?"var(--green)":result?"var(--d)":"#fff"}}>{g.a}</div>
-                      <div className="mn" style={{fontSize:14,color:"var(--d)",marginTop:2}}>{Math.round(wp*100)}%</div>
+                      <div style={{fontSize:12,fontWeight:800,color:RC[ta?.r||g.region]}}>({ta?.s})</div>
+                      <div style={{fontSize:15,fontWeight:result===g.a?900:600,color:result===g.a?"var(--green)":result?"var(--d)":"#fff"}}>{g.a}</div>
+                      <div className="mn" style={{fontSize:12,color:"var(--d)",marginTop:2}}>{Math.round(wp*100)}%</div>
                     </div>
-                    <div style={{display:"flex",alignItems:"center",fontSize:14,color:"var(--d)",fontWeight:800}}>VS</div>
+                    <div style={{display:"flex",alignItems:"center",fontSize:12,color:"var(--d)",fontWeight:800}}>VS</div>
                     {/* Team B */}
-                    <div onClick={()=>{const m=prompt(`${g.b} wins by how many points? (Enter number, or leave blank to skip margin)`);markResult(g.key,g.b,m?parseInt(m)||null:null);}} style={{flex:1,padding:"8px",borderRadius:8,cursor:"pointer",textAlign:"center",
+                    <div onClick={()=>setModal({type:"margin",data:{key:g.key,team:g.b,other:g.a}})} style={{flex:1,padding:"10px 8px",borderRadius:8,cursor:"pointer",textAlign:"center",
                       background:result===g.b?"rgba(47,189,96,0.1)":!result?"rgba(255,255,255,0.02)":"rgba(229,69,61,0.05)",
                       border:result===g.b?"1px solid rgba(47,189,96,0.25)":!result?"1px solid var(--b)":"1px solid rgba(229,69,61,0.12)",
                       transition:"all 0.15s"}}>
-                      <div style={{fontSize:14,fontWeight:800,color:RC[tb?.r||g.region]}}>({tb?.s})</div>
-                      <div style={{fontSize:26,fontWeight:result===g.b?900:600,color:result===g.b?"var(--green)":result?"var(--d)":"#fff"}}>{g.b}</div>
-                      <div className="mn" style={{fontSize:14,color:"var(--d)",marginTop:2}}>{Math.round((1-wp)*100)}%</div>
+                      <div style={{fontSize:12,fontWeight:800,color:RC[tb?.r||g.region]}}>({tb?.s})</div>
+                      <div style={{fontSize:15,fontWeight:result===g.b?900:600,color:result===g.b?"var(--green)":result?"var(--d)":"#fff"}}>{g.b}</div>
+                      <div className="mn" style={{fontSize:12,color:"var(--d)",marginTop:2}}>{Math.round((1-wp)*100)}%</div>
                     </div>
                   </div>
                   {/* Margin display */}
@@ -1683,7 +1791,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                   </div>
                 );
               })}
-              <button onClick={()=>setTrkRound(trkRound+1)} style={{width:"100%",marginTop:10,padding:"8px",borderRadius:8,fontSize:13,fontWeight:700,background:"rgba(139,92,246,0.12)",color:"#7c8db5",border:"1px solid rgba(139,92,246,0.25)",cursor:"pointer",fontFamily:"'DM Sans'"}}>
+              <button onClick={()=>setTrkRound(trkRound+1)} className="btn-primary" style={{width:"100%",marginTop:10,padding:"10px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans'",cursor:"pointer"}}>
                 Go to {nextLabel} →
               </button>
             </div>
@@ -1698,7 +1806,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               <div className="mn" style={{fontSize:15,fontWeight:800}}>{Object.keys(results).length} / 63</div>
             </div>
             <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>{if(confirm("Clear all results? This cannot be undone."))saveResults({});}} style={{padding:"6px 12px",borderRadius:8,fontSize:14,fontWeight:700,background:"rgba(239,68,68,0.08)",color:"var(--red)",border:"1px solid rgba(239,68,68,0.2)",cursor:"pointer",fontFamily:"'DM Sans'"}}>Reset All</button>
+              <button onClick={()=>setModal({type:"confirm",data:{msg:"Clear all results? This cannot be undone.",action:()=>{saveResults({});setMargins({});setBoosts({});setOddsShifts([]);setPathAlerts([]);try{localStorage.removeItem("mm26-margins");localStorage.removeItem("mm26-boosts");}catch(e){}}}})} className="btn-outline" style={{padding:"8px 14px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans'",cursor:"pointer",color:"var(--red)"}}>Reset All</button>
             </div>
           </div>
           <div style={{fontSize:14,color:"var(--m)",marginTop:6,lineHeight:1.5}}>
@@ -1708,6 +1816,58 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
       </div>)}
 
       </div>
+
+      {/* ═══ MODAL OVERLAY ═══ */}
+      {modal&&(
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}} onClick={()=>setModal(null)}>
+          <div style={{background:"var(--s)",border:"1px solid var(--b2)",borderRadius:12,padding:24,maxWidth:400,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}} onClick={e=>e.stopPropagation()}>
+            
+            {/* Margin Entry Modal */}
+            {modal.type==="margin"&&(
+              <div>
+                <div style={{fontSize:16,fontWeight:800,color:"#fff",marginBottom:4}}>{modal.data.team} wins</div>
+                <div style={{fontSize:13,color:"var(--m)",marginBottom:16}}>
+                  {modal.data.team} defeats {modal.data.other}. Enter the margin of victory to adjust power ratings, or skip to just record the result.
+                </div>
+                <div style={{marginBottom:16}}>
+                  <input
+                    id="margin-input"
+                    type="number"
+                    placeholder="Margin of victory (e.g. 12)"
+                    autoFocus
+                    style={{width:"100%",padding:"12px 14px",borderRadius:8,background:"var(--s3)",border:"1px solid var(--b2)",color:"#fff",fontSize:15,fontFamily:"'IBM Plex Mono'",outline:"none"}}
+                    onKeyDown={e=>{if(e.key==="Enter"){const v=e.target.value;markResult(modal.data.key,modal.data.team,v?parseInt(v)||null:null);setModal(null);}}}
+                  />
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="btn-outline" onClick={()=>{markResult(modal.data.key,modal.data.team,null);setModal(null);}} style={{flex:1,padding:"10px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans'",cursor:"pointer"}}>
+                    Skip Margin
+                  </button>
+                  <button className="btn-primary" onClick={()=>{const el=document.getElementById("margin-input");const v=el?.value;markResult(modal.data.key,modal.data.team,v?parseInt(v)||null:null);setModal(null);}} style={{flex:1,padding:"10px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans'",cursor:"pointer"}}>
+                    Submit
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Confirm Modal */}
+            {modal.type==="confirm"&&(
+              <div>
+                <div style={{fontSize:16,fontWeight:800,color:"#fff",marginBottom:4}}>Confirm</div>
+                <div style={{fontSize:14,color:"var(--m)",marginBottom:20,lineHeight:1.5}}>{modal.data.msg}</div>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="btn-outline" onClick={()=>setModal(null)} style={{flex:1,padding:"10px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans'",cursor:"pointer"}}>
+                    Cancel
+                  </button>
+                  <button className="btn-red" onClick={()=>{modal.data.action();setModal(null);}} style={{flex:1,padding:"10px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans'",cursor:"pointer"}}>
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
