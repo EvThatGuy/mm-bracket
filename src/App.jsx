@@ -103,8 +103,8 @@ const CONF_PI={
 "MWC":{teams:1,histFF:3,histChamp:0,overSeed:0.98,avgSeedPerf:1.0,note:"Utah State as 9 is about right"},
 };
 
-function getPower(n){const t=T[n];if(!t)return 0;return t.off*0.20+t.def*0.20+t.sos*0.14+t.mom*0.09+t.exp*0.07+t.reb*0.08+t.to*0.05+t.three*0.04+t.bench*0.04+t.clutch*0.05+t.starPIR*0.04;}
-function getWP(a,b){const d=getPower(a)-getPower(b);return Math.min(0.98,Math.max(0.02,1/(1+Math.pow(10,-d/22))));}
+function getPower(n,boosts){const t=T[n];if(!t)return 0;const b=boosts?.[n]||0;return t.off*0.20+t.def*0.20+t.sos*0.14+t.mom*0.09+t.exp*0.07+t.reb*0.08+t.to*0.05+t.three*0.04+t.bench*0.04+t.clutch*0.05+t.starPIR*0.04+b;}
+function getWP(a,b,boosts){const d=getPower(a,boosts)-getPower(b,boosts);return Math.min(0.98,Math.max(0.02,1/(1+Math.pow(10,-d/22))));}
 
 function getStyleClash(a,b){
   const ta=T[a],tb=T[b];if(!ta||!tb)return null;
@@ -120,24 +120,128 @@ function getStyleClash(a,b){
   return{tempoGap,tempoEdge,styleMatch,defMatch,rebEdge,fastTeam,slowTeam};
 }
 
-function runMC(n=5000){
+function runMC(n=5000,boosts=null){
   const ch={},f4c={},s16c={};
   Object.keys(T).forEach(t=>{ch[t]=0;f4c[t]=0;s16c[t]=0;});
   for(let i=0;i<n;i++){
     const f4=[];
     Object.entries(MO).forEach(([rk,ms])=>{
-      let r1=ms.map(([a,b])=>Math.random()<getWP(a,b)?a:b);
-      let r2=[];for(let j=0;j<r1.length;j+=2)r2.push(Math.random()<getWP(r1[j],r1[j+1])?r1[j]:r1[j+1]);
+      let r1=ms.map(([a,b])=>Math.random()<getWP(a,b,boosts)?a:b);
+      let r2=[];for(let j=0;j<r1.length;j+=2)r2.push(Math.random()<getWP(r1[j],r1[j+1],boosts)?r1[j]:r1[j+1]);
       r2.forEach(t=>s16c[t]++);
-      let s16=[];for(let j=0;j<r2.length;j+=2)s16.push(Math.random()<getWP(r2[j],r2[j+1])?r2[j]:r2[j+1]);
-      const e8w=Math.random()<getWP(s16[0],s16[1])?s16[0]:s16[1];
+      let s16=[];for(let j=0;j<r2.length;j+=2)s16.push(Math.random()<getWP(r2[j],r2[j+1],boosts)?r2[j]:r2[j+1]);
+      const e8w=Math.random()<getWP(s16[0],s16[1],boosts)?s16[0]:s16[1];
       f4c[e8w]++;f4.push(e8w);
     });
-    const s1=Math.random()<getWP(f4[0],f4[3])?f4[0]:f4[3];
-    const s2=Math.random()<getWP(f4[1],f4[2])?f4[1]:f4[2];
-    ch[Math.random()<getWP(s1,s2)?s1:s2]++;
+    const s1=Math.random()<getWP(f4[0],f4[3],boosts)?f4[0]:f4[3];
+    const s2=Math.random()<getWP(f4[1],f4[2],boosts)?f4[1]:f4[2];
+    ch[Math.random()<getWP(s1,s2,boosts)?s1:s2]++;
   }
   return{ch,f4:f4c,s16:s16c,n};
+}
+
+/* ─── SMART ADAPTATION ENGINE ─── */
+// Compute performance boosts from tournament results
+function computeBoosts(margins){
+  // margins = {teamName: {wins:[], losses:[]}} where each entry is margin of victory
+  const boosts={};
+  Object.entries(margins).forEach(([team,data])=>{
+    let boost=0;
+    // Blowout wins get big momentum boost
+    data.wins.forEach(margin=>{
+      if(margin>=20)boost+=4;       // Dominant win
+      else if(margin>=12)boost+=2.5; // Comfortable
+      else if(margin>=6)boost+=1;    // Solid
+      else boost-=0.5;              // Barely survived — red flag
+    });
+    // Losses kill momentum
+    data.losses.forEach(margin=>{
+      boost-=5; // Eliminated teams don't matter, but this tracks
+    });
+    // Surviving close games can mean clutch
+    const closeWins=data.wins.filter(m=>m<=4);
+    if(closeWins.length>=2)boost+=1; // Battle-tested
+    boosts[team]=boost;
+  });
+  return boosts;
+}
+
+// Detect championship path danger
+function detectPathDanger(brackets,results,boosts){
+  const alerts=[];
+  brackets.forEach((bracket,bi)=>{
+    // Find championship pick
+    const champPicks=[];
+    Object.keys(RG).forEach(rk=>{
+      const e8Pick=bracket.picks[`${rk}-3-0`];
+      if(e8Pick)champPicks.push({team:e8Pick,region:rk,bracketName:bracket.name});
+    });
+    
+    champPicks.forEach(({team,region,bracketName})=>{
+      // Is this team still alive?
+      const eliminated=Object.entries(results).some(([key,winner])=>{
+        // Check if this team lost
+        const [rk,rd,gi]=key.split("-");
+        if(rk!==region)return false;
+        // Find who they played
+        if(parseInt(rd)===0){
+          const [a,b]=MO[rk][parseInt(gi)];
+          return(a===team||b===team)&&winner!==team;
+        }
+        return false; // Simplified — full check would trace all rounds
+      });
+      
+      if(eliminated){
+        alerts.push({type:"eliminated",severity:"critical",bracket:bracketName,team,
+          msg:`${team} has been eliminated. Your ${bracketName} bracket's ${RG[region]} pick is busted.`});
+        return;
+      }
+      
+      // Check next opponent matchup quality
+      Object.entries(MO[region]).forEach(([_,pair])=>{
+        // Find potential upcoming opponents
+      });
+      
+      // Check if a dangerous team is in their path
+      const dangerTeams=Object.keys(T).filter(t=>T[t].r===region&&t!==team&&getPower(t,boosts)>=getPower(team,boosts)-3);
+      dangerTeams.forEach(dt=>{
+        const clash=getStyleClash(team,dt);
+        const wp=getWP(team,dt,boosts);
+        if(wp<0.55){
+          const t2=T[dt];
+          let reason="";
+          if(T[team].inj)reason=`${team}'s injury (${T[team].inj}) makes this matchup worse.`;
+          else if(clash&&clash.tempoGap>12)reason=`${dt}'s tempo is a bad stylistic matchup.`;
+          else if(T[dt].def>T[team].off)reason=`${dt}'s defense (${T[dt].def}) can neutralize ${team}'s offense.`;
+          else reason=`${dt} has a ${Math.round((1-wp)*100)}% chance of beating ${team}.`;
+          alerts.push({type:"danger",severity:wp<0.48?"high":"medium",bracket:bracketName,team,
+            opponent:dt,wp:Math.round(wp*100),
+            msg:`${bracketName}: Your ${RG[region]} pick ${team} could face (${t2.s}) ${dt}. ${reason}`});
+        }
+      });
+    });
+  });
+  
+  // Sort by severity
+  alerts.sort((a,b)=>{const sev={critical:0,high:1,medium:2};return(sev[a.severity]||3)-(sev[b.severity]||3);});
+  return alerts;
+}
+
+// Detect title odds shifts after results
+function getOddsShift(prevSim,newSim){
+  if(!prevSim||!newSim)return[];
+  const shifts=[];
+  Object.entries(newSim.ch).forEach(([team,count])=>{
+    const newPct=count/newSim.n*100;
+    const oldCount=prevSim.ch[team]||0;
+    const oldPct=oldCount/prevSim.n*100;
+    const delta=newPct-oldPct;
+    if(Math.abs(delta)>=0.5){
+      shifts.push({team,newPct:+newPct.toFixed(1),oldPct:+oldPct.toFixed(1),delta:+delta.toFixed(1),direction:delta>0?"up":"down"});
+    }
+  });
+  shifts.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
+  return shifts.slice(0,10);
 }
 
 /* ─── AUTO-BRACKET GENERATOR ─── */
@@ -277,12 +381,15 @@ const CSS=`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,op
   --t:#ffffff;--t2:#c5cdd8;--m:rgba(255,255,255,0.45);--d:rgba(255,255,255,0.18);
   --acc:#1493ff;--acc2:#0f7ee0;--green:var(--green);--green2:#25a050;
   --red:var(--red);--orange:var(--orange);--yellow:#ffd23f;
-  --r:8px;--mw:720px;
+  --r:10px;--mw:840px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--bg);color:var(--t);-webkit-font-smoothing:antialiased}
 @keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+@keyframes liveDot{0%,100%{box-shadow:0 0 3px var(--green),0 0 6px var(--green);transform:scale(1);opacity:1}50%{box-shadow:0 0 10px var(--green),0 0 25px var(--green),0 0 40px rgba(47,189,96,0.3);transform:scale(1.3);opacity:0.85}}
+@keyframes liveGlow{0%,100%{box-shadow:0 0 2px rgba(47,189,96,0.1);border-color:rgba(47,189,96,0.15);background:rgba(47,189,96,0.06)}50%{box-shadow:0 0 15px rgba(47,189,96,0.25),0 0 30px rgba(47,189,96,0.1);border-color:rgba(47,189,96,0.5);background:rgba(47,189,96,0.12)}}
+@keyframes liveText{0%,100%{text-shadow:0 0 4px rgba(47,189,96,0.3)}50%{text-shadow:0 0 12px rgba(47,189,96,0.6),0 0 20px rgba(47,189,96,0.3)}}
 .fu{animation:fadeUp 0.2s ease both}
 .gl{background:var(--s);border:1px solid var(--b);border-radius:var(--r)}
 .mn{font-family:'IBM Plex Mono',monospace;letter-spacing:0}
@@ -297,7 +404,7 @@ select,button,input{font-family:'DM Sans',sans-serif}
 `;
 
 export default function App(){
-  const [tab,setTab]=useState("predict");
+  const [tab,setTab]=useState("brief");
   const [reg,setReg]=useState("E");
   const [sim,setSim]=useState(null);
   const [bIdx,setBIdx]=useState(0);
@@ -309,25 +416,163 @@ export default function App(){
   const [selTeam,setSelTeam]=useState(null);
   const [tracker,setTracker]=useState({});
   const [predReg,setPredReg]=useState("ALL");
-  const [results,setResults]=useState({}); // {gameKey: winnerName}
+  const [results,setResults]=useState({});
   const [fetchLoading,setFetchLoading]=useState(false);
   const [fetchMsg,setFetchMsg]=useState("");
   const [trkRound,setTrkRound]=useState(0);
   const [nextRoundPreds,setNextRoundPreds]=useState(null);
+  const [briefing,setBriefing]=useState(null);
+  const [briefLoading,setBriefLoading]=useState(false);
+  const [autoRan,setAutoRan]=useState(false);
+  const [margins,setMargins]=useState({}); // {teamName: {wins:[margins], losses:[margins]}}
+  const [boosts,setBoosts]=useState({});
+  const [prevSim,setPrevSim]=useState(null);
+  const [oddsShifts,setOddsShifts]=useState([]);
+  const [pathAlerts,setPathAlerts]=useState([]);
 
   useEffect(()=>{
     (()=>{try{const v=localStorage.getItem("mm26-br");if(v)setBrackets(JSON.parse(v));}catch(e){}})();
     (()=>{try{const v=localStorage.getItem("mm26-sim");if(v)setSim(JSON.parse(v));}catch(e){}})();
     (()=>{try{const v=localStorage.getItem("mm26-trk");if(v)setTracker(JSON.parse(v));}catch(e){}})();
     (()=>{try{const v=localStorage.getItem("mm26-res");if(v)setResults(JSON.parse(v));}catch(e){}})();
+    (()=>{try{const v=localStorage.getItem("mm26-brief");if(v){const d=JSON.parse(v);if(Date.now()-d.ts<1800000)setBriefing(d);}}catch(e){}})();
+    (()=>{try{const v=localStorage.getItem("mm26-margins");if(v)setMargins(JSON.parse(v));}catch(e){}})();
+    (()=>{try{const v=localStorage.getItem("mm26-boosts");if(v)setBoosts(JSON.parse(v));}catch(e){}})();
   },[]);
 
   const saveResults=useCallback(async(r)=>{setResults(r);try{localStorage.setItem("mm26-res",JSON.stringify(r));}catch(e){}},[]);
 
-  // Mark a game result
-  const markResult=useCallback((key,winner)=>{
+  // Auto-pilot briefing generator
+  const generateBriefing=useCallback(async()=>{
+    setBriefLoading(true);
+    const numResults=Object.keys(results).length;
+    const bracketSummary=brackets.map(b=>{
+      let cor=0,wrg=0,pts=0;const rp={0:10,1:20,2:40,3:80,4:160,5:320};
+      Object.entries(b.picks).forEach(([k,pk])=>{const rd=parseInt(k.split("-")[1]);if(results[k]){if(results[k]===pk){cor++;pts+=(rp[rd]||10);}else wrg++;}});
+      const champs=Object.keys(RG).map(rk=>b.picks[`${rk}-3-0`]||"TBD");
+      return`${b.name}: ${pts}pts, ${cor}/${cor+wrg} correct, Final Four: ${champs.join(", ")}`;
+    }).join("\n");
+    
+    const topUpsets=Object.entries(MO).flatMap(([rk,ms])=>ms.map(([a,b])=>{
+      const p=getWP(a,b);const up=1-p;
+      if(up<0.28||T[b].s<=8)return null;
+      return{fav:a,dog:b,pct:Math.round(up*100),reg:RG[rk]};
+    }).filter(Boolean)).sort((a,b)=>b.pct-a.pct).slice(0,5);
+    
+    const injuries=Object.entries(T).filter(([,t])=>t.inj).map(([n,t])=>`${n} (${t.s}-seed): ${t.inj}`).join(", ");
+    
+    // Smart adaptation data
+    const boostSummary=Object.entries(boosts).filter(([,v])=>Math.abs(v)>=1).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([t,v])=>`${t}: ${v>0?"+":""}${v.toFixed(1)}`).join(", ");
+    const pathAlertSummary=pathAlerts.slice(0,5).map(a=>a.msg).join(" | ");
+    const shiftSummary=oddsShifts.slice(0,5).map(s=>`${s.team}: ${s.oldPct}% -> ${s.newPct}% (${s.delta>0?"+":""}${s.delta})`).join(", ");
+    
+    const prompt=`You are an elite NCAA tournament analyst providing a daily briefing. Search the web for the latest 2026 NCAA Men's Tournament news, scores, and updates.
+
+Current state: ${numResults} games completed out of 63.
+${numResults===0?"Tournament starts with First Four on March 17, first round March 19-20.":""}
+
+User's 3 brackets:
+${bracketSummary}
+
+Key injuries: ${injuries}
+
+Top model upset picks: ${topUpsets.map(u=>`${u.dog} ${u.pct}% over ${u.fav} (${u.reg})`).join(", ")}
+
+${boostSummary?"LIVE PERFORMANCE ADJUSTMENTS (teams getting boosted/dinged based on tournament performance): "+boostSummary:""}
+
+${pathAlertSummary?"PATH DANGER ALERTS detected by our model: "+pathAlertSummary:""}
+
+${shiftSummary?"TITLE ODDS SHIFTS since last simulation: "+shiftSummary:""}
+
+Respond ONLY with JSON (no backticks):
+{
+  "headline": "One bold sentence summarizing the tournament state right now",
+  "status": "pre_tournament" or "round_of_64" or "round_of_32" or "sweet_16" or "elite_8" or "final_four" or "complete",
+  "key_news": ["3-5 bullet points of the most important things happening right now"],
+  "bracket_analysis": "2-3 sentences analyzing the user's 3 brackets - which is performing best, which picks are in danger",
+  "todays_games": ["List upcoming games today/tomorrow with brief prediction, or recent results"],
+  "danger_alerts": ["1-3 specific proactive warnings about bracket picks in trouble, like: Your title pick X plays Y next round. Y's defense is the worst matchup for X's weakened backcourt. Consider hedging."],
+  "performance_flags": ["1-3 notes about teams that looked dominant or vulnerable based on how they've played so far, like: Vanderbilt just won as a 5-seed and looked like the best team on the court. They're now the most undervalued team remaining."],
+  "odds_movement": ["1-3 notes about which teams' title odds have shifted most and why"],
+  "hot_takes": ["2-3 bold predictions or insights most people are missing"],
+  "recommended_action": "One specific thing the user should do right now with their brackets"
+}`;
+    try{
+      const res=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,
+          tools:[{type:"web_search_20250305",name:"web_search"}],
+          messages:[{role:"user",content:prompt}]})});
+      const d=await res.json();
+      const txt=d.content?.filter(b=>b.type==="text").map(b=>b.text).join("")||"";
+      const clean=txt.replace(/```json|```/g,"").trim();
+      const data={...JSON.parse(clean),ts:Date.now()};
+      setBriefing(data);
+      try{localStorage.setItem("mm26-brief",JSON.stringify(data));}catch(e){}
+    }catch(e){
+      setBriefing({headline:"Unable to fetch live briefing. Showing cached analysis.",status:"unknown",
+        key_news:["AI briefing unavailable — check your API connection","Tournament bracket and predictions are still fully functional","Use the TRACKER tab to manually enter scores"],
+        bracket_analysis:"Generate brackets in the AUTO-GEN tab to get started.",todays_games:[],danger_alerts:[],hot_takes:[],
+        recommended_action:"Run a simulation in the SIMULATE tab to see championship probabilities.",ts:Date.now()});
+    }
+    setBriefLoading(false);
+  },[results,brackets]);
+
+  // Auto-run briefing on first load (once)
+  useEffect(()=>{
+    if(!autoRan&&!briefing&&!briefLoading){
+      setAutoRan(true);
+      // Small delay to let state hydrate from localStorage
+      const timer=setTimeout(()=>generateBriefing(),800);
+      return()=>clearTimeout(timer);
+    }
+  },[autoRan,briefing,briefLoading,generateBriefing]);
+
+  // Mark a game result with optional margin — triggers smart adaptation
+  const markResult=useCallback((key,winner,margin=null)=>{
     const nr={...results,[key]:winner};saveResults(nr);
-  },[results,saveResults]);
+    
+    // Update margins if provided
+    if(margin!==null){
+      const [rk,rd,gi]=key.split("-");
+      // Determine loser
+      let loser=null;
+      if(parseInt(rd)===0){
+        const [a,b]=MO[rk][parseInt(gi)];
+        loser=a===winner?b:a;
+      }
+      if(loser){
+        const nm={...margins};
+        if(!nm[winner])nm[winner]={wins:[],losses:[]};
+        if(!nm[loser])nm[loser]={wins:[],losses:[]};
+        nm[winner].wins.push(margin);
+        nm[loser].losses.push(margin);
+        setMargins(nm);
+        try{localStorage.setItem("mm26-margins",JSON.stringify(nm));}catch(e){}
+        
+        // Recompute boosts
+        const newBoosts=computeBoosts(nm);
+        setBoosts(newBoosts);
+        try{localStorage.setItem("mm26-boosts",JSON.stringify(newBoosts));}catch(e){}
+        
+        // Auto re-run simulation with new boosts
+        const oldSim=sim;
+        setPrevSim(oldSim);
+        const newSim=runMC(5000,newBoosts);
+        setSim(newSim);
+        try{localStorage.setItem("mm26-sim",JSON.stringify(newSim));}catch(e){}
+        
+        // Compute odds shifts
+        if(oldSim){
+          const shifts=getOddsShift(oldSim,newSim);
+          setOddsShifts(shifts);
+        }
+      }
+    }
+    
+    // Detect path danger for all brackets
+    const alerts=detectPathDanger(brackets,nr,boosts);
+    setPathAlerts(alerts);
+  },[results,saveResults,margins,sim,brackets,boosts]);
 
   // Score a bracket against results
   const scoreBracket=useCallback((picks)=>{
@@ -446,7 +691,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
     nb[bIdx]={...nb[bIdx],picks:p};save(nb);
   },[brackets,bIdx,save]);
 
-  const doSim=useCallback((n=10000)=>{const d=runMC(n);setSim(d);try{localStorage.setItem("mm26-sim",JSON.stringify(d));}catch(e){}},[]);
+  const doSim=useCallback((n=10000)=>{const old=sim;setPrevSim(old);const d=runMC(n,boosts);setSim(d);try{localStorage.setItem("mm26-sim",JSON.stringify(d));}catch(e){} if(old){setOddsShifts(getOddsShift(old,d));}},[boosts,sim]);
   const simR=useMemo(()=>{if(!sim)return null;return{ch:Object.entries(sim.ch).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,25),f4:Object.entries(sim.f4).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,16),s16:Object.entries(sim.s16).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,20),n:sim.n};},[sim]);
 
   const bScore=useMemo(()=>getBracketScore(brackets[bIdx]?.picks),[brackets,bIdx]);
@@ -489,7 +734,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
     }).filter(v=>v.vegasPct>0).sort((a,b)=>b.edge-a.edge);
   },[simR]);
 
-  const TABS=[{id:"predict",l:"PICKS"},{id:"sim",l:"SIMULATE"},{id:"bracket",l:"BRACKET"},{id:"autogen",l:"AUTO-GEN"},{id:"value",l:"VALUE"},{id:"clash",l:"MATCHUPS"},{id:"players",l:"PLAYERS"},{id:"conf",l:"CONF"},{id:"tracker",l:"TRACKER"}];
+  const TABS=[{id:"brief",l:"BRIEFING"},{id:"predict",l:"PICKS"},{id:"sim",l:"SIMULATE"},{id:"bracket",l:"BRACKET"},{id:"autogen",l:"AUTO-GEN"},{id:"value",l:"VALUE"},{id:"clash",l:"MATCHUPS"},{id:"players",l:"PLAYERS"},{id:"conf",l:"CONF"},{id:"tracker",l:"TRACKER"}];
 
   return(
     <div style={{background:"var(--bg)",minHeight:"100vh",fontFamily:"'DM Sans',sans-serif",color:"var(--t)"}}>
@@ -497,15 +742,15 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
       {/* HEADER */}
       <div style={{background:"var(--s)",borderBottom:"1px solid var(--b)"}}>
-        <div className="wrap" style={{padding:"14px 16px"}}>
+        <div className="wrap" style={{padding:"20px 24px"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
-              <div style={{fontSize:17,fontWeight:800,letterSpacing:-0.4,color:"#fff"}}>March Madness</div>
-              <div style={{fontSize:10,color:"var(--m)",marginTop:1,fontWeight:500}}>2026 NCAA Tournament Bracket Intelligence</div>
+              <div style={{fontSize:24,fontWeight:800,letterSpacing:-0.4,color:"#fff"}}>March Madness</div>
+              <div style={{fontSize:13,color:"var(--m)",marginTop:1,fontWeight:500}}>2026 NCAA Tournament Bracket Intelligence</div>
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:6,background:"rgba(47,189,96,0.1)",border:"1px solid rgba(47,189,96,0.15)"}}>
-              <div style={{width:5,height:5,borderRadius:"50%",background:"var(--green)",animation:"pulse 2s infinite"}}/>
-              <span style={{fontSize:9,color:"var(--green)",fontWeight:700,letterSpacing:0.5}}>LIVE</span>
+            <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",borderRadius:8,background:"rgba(47,189,96,0.06)",border:"1px solid rgba(47,189,96,0.15)",animation:"liveGlow 1.8s ease-in-out infinite"}}>
+              <div style={{width:9,height:9,borderRadius:"50%",background:"var(--green)",boxShadow:"0 0 6px var(--green), 0 0 12px rgba(47,189,96,0.4)",animation:"liveDot 1.8s ease-in-out infinite"}}/>
+              <span style={{fontSize:12,color:"var(--green)",fontWeight:700,letterSpacing:1,animation:"liveText 1.8s ease-in-out infinite"}}>LIVE</span>
             </div>
           </div>
         </div>
@@ -513,10 +758,10 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
       {/* TABS */}
       <div style={{background:"var(--bg)",borderBottom:"2px solid var(--b)",position:"sticky",top:0,zIndex:50}}>
-        <div className="wrap" style={{display:"flex",overflowX:"auto",WebkitOverflowScrolling:"touch",gap:0,padding:"0 16px"}}>
+        <div className="wrap" style={{display:"flex",overflowX:"auto",WebkitOverflowScrolling:"touch",gap:0,padding:"0 20px"}}>
           {TABS.map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)} style={{
-              flex:"0 0 auto",padding:"10px 13px",fontSize:10,fontWeight:700,letterSpacing:0.6,
+              flex:"0 0 auto",padding:"12px 16px",fontSize:12,fontWeight:700,letterSpacing:0.6,
               background:"transparent",color:tab===t.id?"#fff":"var(--m)",
               borderBottom:tab===t.id?"2px solid var(--acc)":"2px solid transparent",
               border:"none",borderTop:"none",borderLeft:"none",borderRight:"none",
@@ -527,76 +772,283 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
       </div>
 
       {/* CONTENT */}
-      <div className="wrap" style={{padding:"16px 16px 40px"}}>
+      <div className="wrap" style={{padding:"20px 20px 50px"}}>
+
+      {/* ═══ AUTO-PILOT BRIEFING TAB ═══ */}
+      {tab==="brief"&&(<div>
+        {/* Loading state */}
+        {briefLoading&&!briefing&&(
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{width:40,height:40,borderRadius:8,border:"3px solid var(--b)",borderTopColor:"var(--acc)",margin:"0 auto 16px",animation:"spin 0.8s linear infinite"}}/>
+            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+            <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:4}}>Generating Briefing</div>
+            <div style={{fontSize:13,color:"var(--m)"}}>Searching for latest scores, news, and injury updates...</div>
+          </div>
+        )}
+
+        {briefing&&(
+          <>
+            {/* Headline */}
+            <div className="gl fu" style={{padding:20,marginBottom:20,borderLeft:"3px solid var(--acc)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+                <div style={{fontSize:12,fontWeight:700,color:"var(--m)",letterSpacing:0.5}}>
+                  {briefing.status==="pre_tournament"?"PRE-TOURNAMENT BRIEFING":"TOURNAMENT BRIEFING"}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  {briefLoading&&<div style={{width:12,height:12,borderRadius:5,border:"2px solid var(--b)",borderTopColor:"var(--acc)",animation:"spin 0.8s linear infinite"}}/>}
+                  <button onClick={generateBriefing} disabled={briefLoading} style={{padding:"6px 12px",borderRadius:7,fontSize:12,fontWeight:600,background:"var(--s2)",color:"var(--m)",border:"1px solid var(--b)",cursor:"pointer",fontFamily:"'DM Sans'"}}>
+                    {briefLoading?"Updating...":"Refresh"}
+                  </button>
+                </div>
+              </div>
+              <div style={{fontSize:22,fontWeight:800,color:"#fff",lineHeight:1.3,letterSpacing:-0.3}}>{briefing.headline}</div>
+              <div style={{fontSize:11,color:"var(--d)",marginTop:6}}>
+                Last updated {briefing.ts?new Date(briefing.ts).toLocaleTimeString():"just now"} — auto-refreshes every 30 min
+              </div>
+            </div>
+
+            {/* Key News */}
+            {briefing.key_news&&briefing.key_news.length>0&&(
+              <div className="gl fu" style={{padding:18,marginBottom:18}}>
+                <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:20}}>Key Updates</div>
+                {briefing.key_news.map((item,i)=>(
+                  <div key={i} style={{display:"flex",gap:12,padding:"6px 0",borderBottom:i<briefing.key_news.length-1?"1px solid var(--b)":"none"}}>
+                    <div style={{width:28,height:28,borderRadius:6,background:"var(--s2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
+                      <span className="mn" style={{fontSize:12,color:"var(--m)",fontWeight:600}}>{i+1}</span>
+                    </div>
+                    <div style={{fontSize:14,color:"var(--t2)",lineHeight:1.5}}>{item}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Bracket Health */}
+            <div className="gl fu" style={{padding:18,marginBottom:18}}>
+              <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:20}}>Bracket Analysis</div>
+              <div style={{fontSize:14,color:"var(--t2)",lineHeight:1.6,marginBottom:18}}>{briefing.bracket_analysis}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                {brackets.map((b,i)=>{
+                  let cor=0,wrg=0,pts=0;const rp={0:10,1:20,2:40,3:80,4:160,5:320};
+                  Object.entries(b.picks).forEach(([k,pk])=>{const rd=parseInt(k.split("-")[1]);if(results[k]){if(results[k]===pk){cor++;pts+=(rp[rd]||10);}else wrg++;}});
+                  const total=Object.keys(b.picks).length;const filled=total>=50;
+                  return(
+                    <div key={i} style={{padding:14,borderRadius:8,background:"var(--s2)",textAlign:"center",border:"1px solid var(--b)"}}>
+                      <div style={{fontSize:15,fontWeight:700,color:"#fff"}}>{b.name}</div>
+                      <div className="mn" style={{fontSize:22,fontWeight:800,color:cor+wrg>0?"var(--acc)":"var(--m)",margin:"4px 0"}}>{pts}</div>
+                      <div style={{fontSize:14,color:"var(--d)"}}>{cor+wrg>0?`${cor}W - ${wrg}L`:filled?`${total} picks ready`:`${total} picks made`}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Danger Alerts */}
+            {briefing.danger_alerts&&briefing.danger_alerts.length>0&&(
+              <div className="gl fu" style={{padding:18,marginBottom:18,borderLeft:"3px solid var(--red)"}}>
+                <div style={{fontSize:15,fontWeight:700,color:"var(--red)",marginBottom:20}}>Danger Alerts</div>
+                {briefing.danger_alerts.map((alert,i)=>(
+                  <div key={i} style={{fontSize:14,color:"var(--t2)",lineHeight:1.5,padding:"4px 0",borderBottom:i<briefing.danger_alerts.length-1?"1px solid var(--b)":"none"}}>{alert}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Today's Games */}
+            {briefing.todays_games&&briefing.todays_games.length>0&&(
+              <div className="gl fu" style={{padding:18,marginBottom:18}}>
+                <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:20}}>Today's Games</div>
+                {briefing.todays_games.map((game,i)=>(
+                  <div key={i} style={{fontSize:14,color:"var(--t2)",lineHeight:1.5,padding:"5px 0",borderBottom:i<briefing.todays_games.length-1?"1px solid var(--b)":"none"}}>{game}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Today's Games */}
+            {briefing.todays_games&&briefing.todays_games.length>0&&(
+              <div className="gl fu" style={{padding:18,marginBottom:18}}>
+                <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:20}}>Today's Games</div>
+                {briefing.todays_games.map((game,i)=>(
+                  <div key={i} style={{fontSize:14,color:"var(--t2)",lineHeight:1.5,padding:"5px 0",borderBottom:i<briefing.todays_games.length-1?"1px solid var(--b)":"none"}}>{game}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Performance Flags — from AI */}
+            {briefing.performance_flags&&briefing.performance_flags.length>0&&(
+              <div className="gl fu" style={{padding:18,marginBottom:18,borderLeft:"3px solid var(--green)"}}>
+                <div style={{fontSize:15,fontWeight:700,color:"var(--green)",marginBottom:20}}>Performance Tracker</div>
+                {briefing.performance_flags.map((flag,i)=>(
+                  <div key={i} style={{fontSize:14,color:"var(--t2)",lineHeight:1.5,padding:"5px 0",borderBottom:i<briefing.performance_flags.length-1?"1px solid var(--b)":"none"}}>{flag}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Live Odds Shifts — from AI + local data */}
+            {(briefing.odds_movement&&briefing.odds_movement.length>0||oddsShifts.length>0)&&(
+              <div className="gl fu" style={{padding:18,marginBottom:18}}>
+                <div style={{fontSize:15,fontWeight:700,color:"var(--acc)",marginBottom:20}}>Title Odds Movement</div>
+                {/* Local computed shifts */}
+                {oddsShifts.length>0&&(
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:briefing.odds_movement?.length>0?8:0}}>
+                    {oddsShifts.slice(0,6).map((s,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",borderRadius:7,background:"var(--s2)"}}>
+                        <div style={{fontSize:14,fontWeight:600,color:"#fff"}}>{s.team}</div>
+                        <div className="mn" style={{fontSize:13,fontWeight:700,color:s.direction==="up"?"var(--green)":"var(--red)"}}>
+                          {s.delta>0?"+":""}{s.delta}%
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* AI-generated context */}
+                {briefing.odds_movement&&briefing.odds_movement.map((note,i)=>(
+                  <div key={i} style={{fontSize:14,color:"var(--t2)",lineHeight:1.5,padding:"4px 0",borderBottom:i<briefing.odds_movement.length-1?"1px solid var(--b)":"none"}}>{note}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Local Path Alerts — computed in real-time */}
+            {pathAlerts.length>0&&(
+              <div className="gl fu" style={{padding:18,marginBottom:18,borderLeft:`3px solid ${pathAlerts[0].severity==="critical"?"var(--red)":"var(--orange)"}`}}>
+                <div style={{fontSize:15,fontWeight:700,color:pathAlerts[0].severity==="critical"?"var(--red)":"var(--orange)",marginBottom:20}}>Path Analysis</div>
+                {pathAlerts.slice(0,5).map((alert,i)=>(
+                  <div key={i} style={{display:"flex",gap:12,padding:"6px 0",borderBottom:i<Math.min(pathAlerts.length,5)-1?"1px solid var(--b)":"none"}}>
+                    <div style={{flexShrink:0,width:28,height:28,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:700,
+                      background:alert.severity==="critical"?"rgba(229,69,61,0.12)":alert.severity==="high"?"rgba(245,166,35,0.12)":"rgba(20,147,255,0.08)",
+                      color:alert.severity==="critical"?"var(--red)":alert.severity==="high"?"var(--orange)":"var(--acc)"}}>
+                      {alert.severity==="critical"?"X":alert.severity==="high"?"!":"~"}
+                    </div>
+                    <div style={{fontSize:14,color:"var(--t2)",lineHeight:1.5}}>{alert.msg}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Live Power Boosts — show teams whose ratings have shifted */}
+            {Object.keys(boosts).filter(t=>Math.abs(boosts[t])>=1.5).length>0&&(
+              <div className="gl fu" style={{padding:18,marginBottom:18}}>
+                <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:20}}>Live Rating Adjustments</div>
+                <div style={{fontSize:13,color:"var(--m)",marginBottom:20}}>Power ratings adjusted based on actual tournament performance. Blowout wins boost, close calls flag concern.</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+                  {Object.entries(boosts).filter(([,v])=>Math.abs(v)>=1.5).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([team,boost],i)=>{
+                    const t=T[team];if(!t)return null;
+                    return(
+                      <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",borderRadius:7,background:"var(--s2)"}}>
+                        <div>
+                          <div style={{fontSize:14,fontWeight:600,color:"#fff"}}>({t.s}) {team}</div>
+                          <div style={{fontSize:14,color:"var(--m)"}}>{margins[team]?.wins?.length||0}W</div>
+                        </div>
+                        <div className="mn" style={{fontSize:15,fontWeight:700,color:boost>0?"var(--green)":"var(--red)"}}>
+                          {boost>0?"+":""}{boost.toFixed(1)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Hot Takes */}
+            {briefing.hot_takes&&briefing.hot_takes.length>0&&(
+              <div className="gl fu" style={{padding:18,marginBottom:18}}>
+                <div style={{fontSize:15,fontWeight:700,color:"var(--orange)",marginBottom:20}}>Intel</div>
+                {briefing.hot_takes.map((take,i)=>(
+                  <div key={i} style={{fontSize:14,color:"var(--t2)",lineHeight:1.5,padding:"4px 0",borderBottom:i<briefing.hot_takes.length-1?"1px solid var(--b)":"none"}}>{take}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Recommended Action */}
+            {briefing.recommended_action&&(
+              <div className="gl fu" style={{padding:18,background:"var(--s2)",borderColor:"var(--acc)",borderLeft:"3px solid var(--acc)"}}>
+                <div style={{fontSize:13,fontWeight:700,color:"var(--acc)",marginBottom:4,letterSpacing:0.3}}>RECOMMENDED ACTION</div>
+                <div style={{fontSize:15,color:"#fff",lineHeight:1.5,fontWeight:600}}>{briefing.recommended_action}</div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Quick actions if no briefing yet and not loading */}
+        {!briefing&&!briefLoading&&(
+          <div style={{textAlign:"center",padding:"40px 20px"}}>
+            <div style={{fontSize:18,fontWeight:800,color:"#fff",marginBottom:6}}>Tournament Intelligence</div>
+            <p style={{fontSize:14,color:"var(--m)",marginBottom:20,lineHeight:1.5}}>
+              Auto-pilot will search the web for the latest scores, injuries, and news, then generate a personalized briefing based on your brackets.
+            </p>
+            <button onClick={generateBriefing} style={{padding:"14px 32px",borderRadius:8,fontSize:15,fontWeight:700,background:"var(--acc)",color:"#fff",border:"none",cursor:"pointer",fontFamily:"'DM Sans'"}}>
+              Generate Briefing
+            </button>
+          </div>
+        )}
+      </div>)}
 
       {/* ═══ GAME PREDICTIONS TAB ═══ */}
       {tab==="predict"&&(<div>
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:15,fontWeight:800,letterSpacing:-0.3,color:"#fff"}}>Game Predictions</div>
-          <p style={{fontSize:11,color:"var(--m)",lineHeight:1.5,marginTop:3}}>Model-driven picks for every first-round matchup with confidence tiers and reasoning.</p>
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.3,color:"#fff"}}>Game Predictions</div>
+          <p style={{fontSize:14,color:"var(--m)",lineHeight:1.5,marginTop:3}}>Model-driven picks for every first-round matchup with confidence tiers and reasoning.</p>
         </div>
 
         {/* Region filter */}
-        <div style={{display:"flex",gap:4,marginBottom:14,background:"var(--s)",borderRadius:8,padding:3,border:"1px solid var(--b)"}}>
+        <div style={{display:"flex",gap:12,marginBottom:18,background:"var(--s)",borderRadius:8,padding:3,border:"1px solid var(--b)"}}>
           {[["ALL","All"],...Object.entries(RG).map(([k,v])=>[k,v])].map(([k,v])=>(
-            <button key={k} onClick={()=>setPredReg(k)} style={{flex:1,padding:"7px 4px",borderRadius:6,fontSize:10,fontWeight:600,background:predReg===k?"var(--s3)":"transparent",color:predReg===k?"#fff":"var(--m)",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.12s"}}>{v}</button>
+            <button key={k} onClick={()=>setPredReg(k)} style={{flex:1,padding:"11px 8px",borderRadius:8,fontSize:13,fontWeight:600,background:predReg===k?"var(--s3)":"transparent",color:predReg===k?"#fff":"var(--m)",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.12s"}}>{v}</button>
           ))}
         </div>
 
         {Object.entries(MO).filter(([rk])=>predReg==="ALL"||predReg===rk).map(([rk,matchups])=>(
-          <div key={rk} style={{marginBottom:16}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+          <div key={rk} style={{marginBottom:20}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
               <div style={{width:3,height:14,borderRadius:1,background:RC[rk]}}/>
-              <span style={{fontSize:11,fontWeight:700,color:"var(--t2)"}}>{RG[rk]} Region</span>
+              <span style={{fontSize:15,fontWeight:700,color:"var(--t2)"}}>{RG[rk]} Region</span>
             </div>
             {matchups.map(([a,b],i)=>{
               const pred=getGamePrediction(a,b);if(!pred)return null;
               return(
-                <div key={i} className="gl" style={{padding:12,marginBottom:8,borderLeft:`3px solid ${pred.confColor}`}}>
+                <div key={i} className="gl" style={{padding:16,marginBottom:20,borderLeft:`3px solid ${pred.confColor}`}}>
                   {/* Matchup header */}
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
                     <div style={{flex:1}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                        <span style={{fontSize:10,fontWeight:800,color:RC[rk]}}>({T[a].s})</span>
-                        <span style={{fontSize:12,fontWeight:pred.winner===a?900:500,color:pred.winner===a?"#fff":"var(--m)"}}>{a}</span>
-                        <span style={{fontSize:9,color:"var(--d)"}}>vs</span>
-                        <span style={{fontSize:10,fontWeight:800,color:RC[rk]}}>({T[b].s})</span>
-                        <span style={{fontSize:12,fontWeight:pred.winner===b?900:500,color:pred.winner===b?"#fff":"var(--m)"}}>{b}</span>
+                      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:4}}>
+                        <span style={{fontSize:13,fontWeight:800,color:RC[rk]}}>({T[a].s})</span>
+                        <span style={{fontSize:15,fontWeight:pred.winner===a?900:500,color:pred.winner===a?"#fff":"var(--m)"}}>{a}</span>
+                        <span style={{fontSize:14,color:"var(--d)"}}>vs</span>
+                        <span style={{fontSize:13,fontWeight:800,color:RC[rk]}}>({T[b].s})</span>
+                        <span style={{fontSize:15,fontWeight:pred.winner===b?900:500,color:pred.winner===b?"#fff":"var(--m)"}}>{b}</span>
                       </div>
-                      <div style={{fontSize:9,color:"var(--m)"}}>{T[a].rec} {T[a].c} vs {T[b].rec} {T[b].c}</div>
+                      <div style={{fontSize:14,color:"var(--m)"}}>{T[a].rec} {T[a].c} vs {T[b].rec} {T[b].c}</div>
                     </div>
                     <div style={{textAlign:"center",flexShrink:0}}>
-                      <div style={{fontSize:8,fontWeight:700,letterSpacing:1,color:pred.confColor,padding:"1px 6px",borderRadius:3,background:`${pred.confColor}15`,border:`1px solid ${pred.confColor}30`}}>{pred.conf}</div>
+                      <div style={{fontSize:15,fontWeight:700,letterSpacing:1,color:pred.confColor,padding:"1px 6px",borderRadius:5,background:`${pred.confColor}15`,border:`1px solid ${pred.confColor}30`}}>{pred.conf}</div>
                     </div>
                   </div>
 
                   {/* Pick */}
-                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:8,background:"rgba(255,255,255,0.03)",marginBottom:8}}>
-                    <div style={{width:32,height:32,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:`${pred.confColor}20`,border:`1px solid ${pred.confColor}40`}}>
-                      <span className="mn" style={{fontSize:14,fontWeight:800,color:pred.confColor}}>{pred.winPct}</span>
+                  <div style={{display:"flex",alignItems:"center",gap:12,padding:"8px 10px",borderRadius:8,background:"rgba(255,255,255,0.03)",marginBottom:20}}>
+                    <div style={{width:38,height:38,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",background:`${pred.confColor}20`,border:`1px solid ${pred.confColor}40`}}>
+                      <span className="mn" style={{fontSize:15,fontWeight:800,color:pred.confColor}}>{pred.winPct}</span>
                     </div>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:13,fontWeight:900,color:"#fff"}}>PICK: {pred.winner}</div>
-                      <div style={{fontSize:9,color:"var(--m)"}}>({T[pred.winner].s}) seed · {T[pred.winner].rec} · {T[pred.winner].c}</div>
+                      <div style={{fontSize:16,fontWeight:900,color:"#fff"}}>PICK: {pred.winner}</div>
+                      <div style={{fontSize:14,color:"var(--m)"}}>({T[pred.winner].s}) seed · {T[pred.winner].rec} · {T[pred.winner].c}</div>
                     </div>
-                    <div style={{fontSize:9,color:pred.confColor,fontWeight:700}}>{pred.winPct}% WIN</div>
+                    <div style={{fontSize:14,color:pred.confColor,fontWeight:700}}>{pred.winPct}% WIN</div>
                   </div>
 
                   {/* Reasoning */}
                   <div style={{marginBottom:pred.upsetAngle?6:0}}>
                     {pred.reasons.map((r,ri)=>(
                       <div key={ri} style={{display:"flex",gap:5,padding:"2px 0"}}>
-                        <span style={{color:pred.confColor,fontSize:9,fontWeight:800,flexShrink:0}}>→</span>
-                        <span style={{fontSize:9,color:"rgba(255,255,255,0.6)",lineHeight:1.4}}>{r}</span>
+                        <span style={{color:pred.confColor,fontSize:14,fontWeight:800,flexShrink:0}}>→</span>
+                        <span style={{fontSize:14,color:"rgba(255,255,255,0.6)",lineHeight:1.4}}>{r}</span>
                       </div>
                     ))}
                   </div>
 
                   {/* Upset angle */}
                   {pred.upsetAngle&&pred.conf!=="LOCK"&&(
-                    <div style={{padding:"5px 8px",borderRadius:6,background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.15)",marginTop:4}}>
-                      <span style={{fontSize:8,fontWeight:700,color:"var(--red)",letterSpacing:0.5}}>UPSET WATCH: </span>
-                      <span style={{fontSize:9,color:"rgba(255,255,255,0.55)"}}>{pred.upsetAngle}</span>
+                    <div style={{padding:"7px 10px",borderRadius:8,background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.15)",marginTop:4}}>
+                      <span style={{fontSize:15,fontWeight:700,color:"var(--red)",letterSpacing:0.5}}>UPSET WATCH: </span>
+                      <span style={{fontSize:14,color:"rgba(255,255,255,0.55)"}}>{pred.upsetAngle}</span>
                     </div>
                   )}
                 </div>
@@ -606,16 +1058,16 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
         ))}
 
         {/* Summary stats */}
-        <div className="gl" style={{padding:12,marginTop:8}}>
-          <div style={{fontSize:9,fontWeight:700,color:"var(--m)",letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Prediction Summary</div>
+        <div className="gl" style={{padding:16,marginTop:8}}>
+          <div style={{fontSize:14,fontWeight:700,color:"var(--m)",letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>Prediction Summary</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
             {["LOCK","STRONG","LEAN","TOSS-UP"].map(c=>{
               const color=c==="LOCK"?"var(--green)":c==="STRONG"?"var(--acc)":c==="LEAN"?"var(--orange)":"var(--red)";
               const count=Object.entries(MO).flatMap(([rk,ms])=>ms.map(([a,b])=>getGamePrediction(a,b))).filter(p=>p?.conf===c).length;
               return(
-                <div key={c} style={{textAlign:"center",padding:"6px",borderRadius:6,background:`${color}08`,border:`1px solid ${color}20`}}>
-                  <div className="mn" style={{fontSize:16,fontWeight:800,color}}>{count}</div>
-                  <div style={{fontSize:7,fontWeight:700,color,letterSpacing:0.5}}>{c}</div>
+                <div key={c} style={{textAlign:"center",padding:"6px",borderRadius:8,background:`${color}08`,border:`1px solid ${color}20`}}>
+                  <div className="mn" style={{fontSize:15,fontWeight:800,color}}>{count}</div>
+                  <div style={{fontSize:13,fontWeight:700,color,letterSpacing:0.5}}>{c}</div>
                 </div>
               );
             })}
@@ -625,25 +1077,25 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
       {/* ═══ AUTO-GENERATE BRACKET TAB ═══ */}
       {tab==="autogen"&&(<div>
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:15,fontWeight:800,letterSpacing:-0.3,color:"#fff"}}>Auto-Generate Brackets</div>
-          <p style={{fontSize:11,color:"var(--m)",lineHeight:1.5,marginTop:3}}>
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.3,color:"#fff"}}>Auto-Generate Brackets</div>
+          <p style={{fontSize:14,color:"var(--m)",lineHeight:1.5,marginTop:3}}>
             Instantly build complete 63-game brackets at 3 risk levels. Powered by the prediction engine, injury data, and style clash analysis.
           </p>
         </div>
 
-        <div style={{display:"grid",gridTemplateColumns:"1fr",gap:8,marginBottom:16}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr",gap:12,marginBottom:20}}>
           {[
             {mode:"chalk",name:"Chalk",desc:"Always pick the favorite. Safest bracket — maximizes correct picks in early rounds. Best for small pools.",color:"var(--acc)",upsets:"0-2 upsets"},
             {mode:"balanced",name:"Balanced",desc:"Smart upsets only — targets games with real edges: injuries, under-seeding, style mismatches. Best for 10-50 person pools.",color:"var(--green)",upsets:"5-8 upsets"},
             {mode:"chaos",name:"Upset Heavy",desc:"Maximum chaos — picks every live upset, targets Cinderellas, fades injured teams. Best for 100+ person pools.",color:"var(--red)",upsets:"12-18 upsets"},
           ].map(({mode,name,desc,color,upsets})=>(
-            <div key={mode} className="gl" style={{padding:14,borderLeft:`3px solid ${color}`}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+            <div key={mode} className="gl" style={{padding:18,borderLeft:`3px solid ${color}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:700,color:"#fff"}}>{name}</div>
-                  <div style={{fontSize:10,color:"var(--m)",lineHeight:1.5,marginTop:3,maxWidth:320}}>{desc}</div>
-                  <div className="mn" style={{fontSize:9,color,fontWeight:600,marginTop:4}}>{upsets}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:"#fff"}}>{name}</div>
+                  <div style={{fontSize:13,color:"var(--m)",lineHeight:1.5,marginTop:5,maxWidth:320}}>{desc}</div>
+                  <div className="mn" style={{fontSize:14,color,fontWeight:600,marginTop:4}}>{upsets}</div>
                 </div>
               </div>
               <button onClick={()=>{
@@ -652,7 +1104,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                 const targetIdx=mode==="chalk"?0:mode==="balanced"?1:2;
                 nb[targetIdx]={...nb[targetIdx],picks:newPicks};
                 save(nb);
-              }} style={{width:"100%",padding:"10px",borderRadius:8,fontSize:11,fontWeight:700,background:`${color}`,color:"#000",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",marginTop:4}}>
+              }} style={{width:"100%",padding:"10px",borderRadius:8,fontSize:15,fontWeight:700,background:`${color}`,color:"#000",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",marginTop:4}}>
                 Generate & Save to "{name}" Bracket →
               </button>
             </div>
@@ -660,9 +1112,9 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
         </div>
 
         {/* Generate All */}
-        <div className="gl" style={{padding:16,marginBottom:16,textAlign:"center",background:"linear-gradient(135deg,rgba(157,122,255,0.04),rgba(74,158,255,0.04))"}}>
+        <div className="gl" style={{padding:20,marginBottom:20,textAlign:"center",background:"linear-gradient(135deg,rgba(157,122,255,0.04),rgba(74,158,255,0.04))"}}>
           <div style={{fontSize:13,fontWeight:800,marginBottom:6,letterSpacing:-0.2}}>Generate All 3 Brackets</div>
-          <p style={{fontSize:10,color:"var(--m)",marginBottom:12}}>Fill Chalk, Balanced, and Upset Heavy simultaneously — ready for any pool.</p>
+          <p style={{fontSize:13,color:"var(--m)",marginBottom:20}}>Fill Chalk, Balanced, and Upset Heavy simultaneously — ready for any pool.</p>
           <button onClick={()=>{
             const nb=[
               {name:"Chalk",picks:generateBracket("chalk")},
@@ -670,32 +1122,32 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               {name:"Upset Heavy",picks:generateBracket("chaos")},
             ];
             save(nb);
-          }} style={{padding:"12px 36px",borderRadius:8,fontSize:12,fontWeight:700,background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#000",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",letterSpacing:0.2,transition:"all 0.15s"}}>
+          }} style={{padding:"14px 40px",borderRadius:8,fontSize:14,fontWeight:700,background:"linear-gradient(135deg,var(--acc),var(--acc2))",color:"#000",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",letterSpacing:0.2,transition:"all 0.15s"}}>
             Generate All 3 →
           </button>
         </div>
 
         {/* Preview generated brackets */}
-        <div style={{fontSize:9,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:8}}>Current Bracket Status</div>
+        <div style={{fontSize:14,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:20}}>Current Bracket Status</div>
         {brackets.map((b,bi)=>{
           const total=Object.keys(b.picks).length;const score=getBracketScore(b.picks);
           // Get regional champs
           const champs=Object.entries(RG).map(([rk,rn])=>{const k=`${rk}-3-0`;return{reg:rn,team:b.picks[k]||null,color:RC[rk]};});
           return(
-            <div key={bi} className="gl" style={{padding:12,marginBottom:8}}>
+            <div key={bi} className="gl" style={{padding:16,marginBottom:20}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:12,fontWeight:800}}>{b.name}</span>
-                  {score&&<span style={{fontSize:8,fontWeight:700,color:score.color,padding:"1px 6px",borderRadius:3,background:`${score.color}12`}}>{score.profile}</span>}
+                  <span style={{fontSize:14,fontWeight:800}}>{b.name}</span>
+                  {score&&<span style={{fontSize:15,fontWeight:700,color:score.color,padding:"1px 6px",borderRadius:5,background:`${score.color}12`}}>{score.profile}</span>}
                 </div>
-                <span className="mn" style={{fontSize:10,color:total>=60?"var(--green)":"var(--m)"}}>{total}/60</span>
+                <span className="mn" style={{fontSize:13,color:total>=60?"var(--green)":"var(--m)"}}>{total}/60</span>
               </div>
               {total>0&&(
                 <div style={{display:"flex",gap:4}}>
                   {champs.map((ch,ci)=>(
-                    <div key={ci} style={{flex:1,textAlign:"center",padding:"4px",borderRadius:4,background:"rgba(255,255,255,0.02)",border:`1px solid ${ch.color}20`}}>
-                      <div style={{fontSize:7,color:ch.color,fontWeight:700}}>{ch.reg}</div>
-                      <div style={{fontSize:9,fontWeight:800,color:ch.team?"#fff":"var(--d)"}}>{ch.team||"—"}</div>
+                    <div key={ci} style={{flex:1,textAlign:"center",padding:"4px",borderRadius:6,background:"rgba(255,255,255,0.02)",border:`1px solid ${ch.color}20`}}>
+                      <div style={{fontSize:13,color:ch.color,fontWeight:700}}>{ch.reg}</div>
+                      <div style={{fontSize:14,fontWeight:800,color:ch.team?"#fff":"var(--d)"}}>{ch.team||"—"}</div>
                     </div>
                   ))}
                 </div>
@@ -705,16 +1157,16 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
         })}
 
         {/* Injury-driven picks */}
-        <div className="gl" style={{padding:14,marginTop:8}}>
-          <div style={{fontSize:9,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:8}}>INJURY-DRIVEN UPSET INTELLIGENCE</div>
-          <div style={{fontSize:10,color:"var(--m)",lineHeight:1.6,marginBottom:8}}>
+        <div className="gl" style={{padding:18,marginTop:8}}>
+          <div style={{fontSize:14,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:20}}>INJURY-DRIVEN UPSET INTELLIGENCE</div>
+          <div style={{fontSize:13,color:"var(--m)",lineHeight:1.6,marginBottom:20}}>
             These injuries are baked into the balanced and upset-heavy bracket generators:
           </div>
           {Object.entries(T).filter(([,t])=>t.inj).map(([name,t])=>(
-            <div key={name} style={{display:"flex",gap:6,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
-              <span style={{fontSize:10,fontWeight:700,color:RC[t.r]}}>({t.s}) {name}</span>
-              <span style={{fontSize:10,color:"var(--red)"}}>{t.inj}</span>
-              <span style={{fontSize:9,color:"var(--d)",marginLeft:"auto"}}>
+            <div key={name} style={{display:"flex",gap:12,padding:"5px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+              <span style={{fontSize:13,fontWeight:700,color:RC[t.r]}}>({t.s}) {name}</span>
+              <span style={{fontSize:13,color:"var(--red)"}}>{t.inj}</span>
+              <span style={{fontSize:14,color:"var(--d)",marginLeft:"auto"}}>
                 {name==="Michigan"?"Cason ACL → frontcourt must carry":name==="UNC"?"Wilson OUT → major scoring loss":name==="Louisville"?"Brown GTD → limited at best":name==="Texas Tech"?"Toppin OUT → no interior game":"Impact TBD"}
               </span>
             </div>
@@ -724,32 +1176,32 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
       {/* ═══ SIMULATE TAB ═══ */}
       {tab==="sim"&&(<div>
-        <div className="gl fu" style={{padding:20,textAlign:"center",marginBottom:14}}>
-          <div style={{fontSize:15,fontWeight:800,marginBottom:4,letterSpacing:-0.3,color:"#fff"}}>Tournament Simulation</div>
-          <p style={{fontSize:10,color:"var(--m)",marginBottom:14,lineHeight:1.6}}>
+        <div className="gl fu" style={{padding:20,textAlign:"center",marginBottom:18}}>
+          <div style={{fontSize:14,fontWeight:800,marginBottom:4,letterSpacing:-0.3,color:"#fff"}}>Tournament Simulation</div>
+          <p style={{fontSize:13,color:"var(--m)",marginBottom:18,lineHeight:1.6}}>
             Run thousands of tournament simulations using an 11-factor composite power model.
           </p>
-          <p className="mn" style={{fontSize:8,color:"var(--d)",marginBottom:14,lineHeight:1.8,maxWidth:480,margin:"0 auto 14px"}}>
+          <p className="mn" style={{fontSize:14,color:"var(--d)",marginBottom:18,lineHeight:1.8,maxWidth:480,margin:"0 auto 14px"}}>
             PWR = OFF×.20 + DEF×.20 + SOS×.14 + MOM×.09 + EXP×.07 + REB×.08 + TO×.05 + 3PT×.04 + BENCH×.04 + CLUTCH×.05 + STAR×.04
           </p>
-          <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:4}}>
+          <div style={{display:"flex",gap:12,justifyContent:"center",marginBottom:4}}>
             {[1000,5000,10000,25000].map(n=>(
-              <button key={n} onClick={()=>doSim(n)} style={{padding:"8px 18px",borderRadius:6,fontSize:10,fontWeight:700,background:"var(--acc)",color:"#fff",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.12s"}}>{(n/1000)}k</button>
+              <button key={n} onClick={()=>doSim(n)} style={{padding:"11px 22px",borderRadius:8,fontSize:13,fontWeight:700,background:"var(--acc)",color:"#fff",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.12s"}}>{(n/1000)}k</button>
             ))}
           </div>
         </div>
 
         {simR&&(<>
-          <div className="gl fu" style={{padding:14,marginBottom:12}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:9,fontWeight:700,fontWeight:700,color:"var(--t2)"}}>Championship Win %</span>
-              <span className="mn" style={{fontSize:8,color:"var(--d)"}}>{simR.n.toLocaleString()} sims</span>
+          <div className="gl fu" style={{padding:18,marginBottom:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:20}}>
+              <span style={{fontSize:14,fontWeight:700,fontWeight:700,color:"var(--t2)"}}>Championship Win %</span>
+              <span className="mn" style={{fontSize:14,color:"var(--d)"}}>{simR.n.toLocaleString()} sims</span>
             </div>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={simR.ch.slice(0,12).map(([n,c])=>({name:n.length>11?n.slice(0,10)+"…":n,pct:+(c/simR.n*100).toFixed(1)}))} layout="vertical" margin={{left:0,right:35}}>
-                <XAxis type="number" tick={{fill:"rgba(140,160,200,0.35)",fontSize:8,fontFamily:"IBM Plex Mono"}} tickFormatter={v=>`${v}%`}/>
-                <YAxis type="category" dataKey="name" width={85} tick={{fill:"rgba(180,195,220,0.7)",fontSize:9,fontFamily:"DM Sans"}}/>
-                <Tooltip contentStyle={{background:"var(--s2)",border:"1px solid var(--b2)",borderRadius:6,fontSize:10,fontFamily:"DM Sans",color:"#fff"}} formatter={v=>[`${v}%`,"Win %"]}/>
+                <XAxis type="number" tick={{fill:"rgba(140,160,200,0.35)",fontSize:26,fontFamily:"IBM Plex Mono"}} tickFormatter={v=>`${v}%`}/>
+                <YAxis type="category" dataKey="name" width={85} tick={{fill:"rgba(180,195,220,0.7)",fontSize:12,fontFamily:"DM Sans"}}/>
+                <Tooltip contentStyle={{background:"var(--s2)",border:"1px solid var(--b2)",borderRadius:8,fontSize:13,fontFamily:"DM Sans",color:"#fff"}} formatter={v=>[`${v}%`,"Win %"]}/>
                 <Bar dataKey="pct" radius={[0,4,4,0]}>
                   {simR.ch.slice(0,12).map(([n],i)=><Cell key={i} fill={i===0?"var(--acc)":i<3?"var(--acc)":i<6?"var(--green)":"rgba(255,255,255,0.06)"}/>)}
                 </Bar>
@@ -757,14 +1209,14 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             </ResponsiveContainer>
           </div>
 
-          <div className="gl fu" style={{padding:14,marginBottom:12}}>
-            <div style={{fontSize:9,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:8}}>Final Four Rates — Top 12</div>
+          <div className="gl fu" style={{padding:18,marginBottom:20}}>
+            <div style={{fontSize:14,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:20}}>Final Four Rates — Top 12</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
               {simR.f4.slice(0,12).map(([n,c])=>{const t=T[n];const pct=(c/simR.n*100).toFixed(1);
-                return(<div key={n} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 6px",borderRadius:6,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.04)"}}>
-                  <div style={{width:18,height:18,borderRadius:3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:800,background:RC[t.r],color:"#000"}}>{t.s}</div>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:9,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n}</div><div style={{fontSize:7,color:"var(--m)"}}>{RG[t.r]}</div></div>
-                  <span className="mn" style={{fontSize:10,fontWeight:700,color:RC[t.r]}}>{pct}%</span>
+                return(<div key={n} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 6px",borderRadius:8,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.04)"}}>
+                  <div style={{width:28,height:28,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,background:RC[t.r],color:"#000"}}>{t.s}</div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n}</div><div style={{fontSize:13,color:"var(--m)"}}>{RG[t.r]}</div></div>
+                  <span className="mn" style={{fontSize:13,fontWeight:700,color:RC[t.r]}}>{pct}%</span>
                 </div>);
               })}
             </div>
@@ -772,12 +1224,12 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
           {/* Upset alerts */}
           <div className="gl fu" style={{padding:14}}>
-            <div style={{fontSize:9,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:8}}>First-Round Upset Alerts</div>
+            <div style={{fontSize:14,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:20}}>First-Round Upset Alerts</div>
             {Object.entries(MO).flatMap(([rk,ms])=>ms.map(([a,b])=>{const p=getWP(a,b);const up=1-p;if(up<0.28||T[b].s<=8)return null;return{r:rk,fav:a,dog:b,pct:up};}).filter(Boolean)).sort((a,b)=>b.pct-a.pct).slice(0,8).map((u,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
-                <div className="mn" style={{fontSize:13,fontWeight:800,color:u.pct>=0.45?"var(--red)":"var(--orange)",width:35,textAlign:"center"}}>{Math.round(u.pct*100)}%</div>
-                <div style={{flex:1}}><div style={{fontSize:10,fontWeight:700}}><span style={{color:RC[u.r]}}>({T[u.dog].s})</span> {u.dog} over ({T[u.fav].s}) {u.fav}</div>
-                <div style={{fontSize:8,color:"var(--m)"}}>{RG[u.r]} · {T[u.dog].note?.slice(0,70)}</div></div>
+              <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                <div className="mn" style={{fontSize:15,fontWeight:800,color:u.pct>=0.45?"var(--red)":"var(--orange)",width:35,textAlign:"center"}}>{Math.round(u.pct*100)}%</div>
+                <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}><span style={{color:RC[u.r]}}>({T[u.dog].s})</span> {u.dog} over ({T[u.fav].s}) {u.fav}</div>
+                <div style={{fontSize:14,color:"var(--m)"}}>{RG[u.r]} · {T[u.dog].note?.slice(0,70)}</div></div>
               </div>
             ))}
           </div>
@@ -787,23 +1239,23 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
       {/* ═══ BRACKET TAB ═══ */}
       {tab==="bracket"&&(<div>
         {/* Bracket selector */}
-        <div style={{display:"flex",gap:4,marginBottom:10}}>
+        <div style={{display:"flex",gap:12,marginBottom:18}}>
           {brackets.map((b,i)=>(
-            <button key={i} onClick={()=>setBIdx(i)} style={{flex:1,padding:"8px",borderRadius:8,fontSize:10,fontWeight:700,background:bIdx===i?"rgba(255,255,255,0.08)":"transparent",color:bIdx===i?"#fff":"var(--m)",border:bIdx===i?"1px solid rgba(255,255,255,0.15)":"1px solid var(--b)",cursor:"pointer",fontFamily:"'DM Sans'"}}>
-              {b.name}<br/><span className="mn" style={{fontSize:8,color:"var(--d)"}}>{Object.keys(b.picks).length} picks</span>
+            <button key={i} onClick={()=>setBIdx(i)} style={{flex:1,padding:"8px",borderRadius:8,fontSize:13,fontWeight:700,background:bIdx===i?"rgba(255,255,255,0.08)":"transparent",color:bIdx===i?"#fff":"var(--m)",border:bIdx===i?"1px solid rgba(255,255,255,0.15)":"1px solid var(--b)",cursor:"pointer",fontFamily:"'DM Sans'"}}>
+              {b.name}<br/><span className="mn" style={{fontSize:14,color:"var(--d)"}}>{Object.keys(b.picks).length} picks</span>
             </button>
           ))}
         </div>
 
         {/* Bracket confidence */}
         {bScore&&(
-          <div className="gl" style={{padding:10,marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
+          <div className="gl" style={{padding:14,marginBottom:18,display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:50,height:50,borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:`${bScore.color}15`,border:`1px solid ${bScore.color}40`}}>
-              <div style={{fontSize:12,fontWeight:900,color:bScore.color}}>{bScore.profile}</div>
+              <div style={{fontSize:16,fontWeight:900,color:bScore.color}}>{bScore.profile}</div>
             </div>
             <div style={{flex:1}}>
-              <div style={{fontSize:10,fontWeight:700}}>Bracket Profile: <span style={{color:bScore.color}}>{bScore.profile}</span></div>
-              <div style={{fontSize:9,color:"var(--m)"}}>
+              <div style={{fontSize:13,fontWeight:700}}>Bracket Profile: <span style={{color:bScore.color}}>{bScore.profile}</span></div>
+              <div style={{fontSize:14,color:"var(--m)"}}>
                 {bScore.chalk} chalk / {bScore.upsets} upsets of {bScore.total} picks · {Math.round(bScore.chalkPct*100)}% favorites
               </div>
             </div>
@@ -811,33 +1263,33 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
         )}
 
         {/* Region tabs */}
-        <div style={{display:"flex",gap:4,marginBottom:10}}>
+        <div style={{display:"flex",gap:12,marginBottom:18}}>
           {Object.entries(RG).map(([k,v])=>(
-            <button key={k} onClick={()=>setReg(k)} style={{flex:1,padding:"8px",borderRadius:8,fontSize:9,fontWeight:700,background:reg===k?RC[k]:"var(--s)",color:reg===k?"#000":"var(--m)",border:reg===k?"none":"1px solid var(--b)",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.15s",letterSpacing:0.2}}>{v}</button>
+            <button key={k} onClick={()=>setReg(k)} style={{flex:1,padding:"8px",borderRadius:8,fontSize:12,fontWeight:700,background:reg===k?RC[k]:"var(--s)",color:reg===k?"#000":"var(--m)",border:reg===k?"none":"1px solid var(--b)",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.15s",letterSpacing:0.2}}>{v}</button>
           ))}
         </div>
 
         {/* Bracket grid */}
         <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:12}}>
-          <div style={{display:"flex",gap:6,minWidth:600}}>
+          <div style={{display:"flex",gap:12,minWidth:600}}>
             {["R64","R32","S16","E8"].map((label,ri)=>{
               const teams=ri===0?MO[reg].flat():getAdv(reg,ri);
               const pairs=[];for(let i=0;i<teams.length;i+=2)pairs.push([teams[i],teams[i+1]]);
               return(
                 <div key={ri} style={{display:"flex",flexDirection:"column",justifyContent:"space-around",minWidth:135,gap:3,flexShrink:0}}>
-                  <div style={{fontSize:7,fontWeight:700,fontWeight:700,color:"var(--t2)",textAlign:"center",padding:"0 0 3px"}}>{label}</div>
+                  <div style={{fontSize:13,fontWeight:700,fontWeight:700,color:"var(--t2)",textAlign:"center",padding:"0 0 3px"}}>{label}</div>
                   {pairs.map(([a,b],pi)=>{
                     const key=`${reg}-${ri}-${pi}`;const picked=brackets[bIdx].picks[key];
                     return(
                       <div key={pi} style={{display:"flex",flexDirection:"column",justifyContent:"center",flex:1,gap:1}}>
                         {[a,b].map((tm,ti)=>{
-                          if(!tm)return <div key={ti} style={{height:26,background:"rgba(255,255,255,0.015)",borderRadius:3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"var(--d)"}}>—</div>;
+                          if(!tm)return <div key={ti} style={{height:26,background:"rgba(255,255,255,0.015)",borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"var(--d)"}}>—</div>;
                           const t=T[tm];const other=ti===0?b:a;const wp=other?getWP(tm,other):1;const sel=picked===tm;
                           return(
-                            <div key={ti} onClick={()=>pick(key,tm)} style={{display:"flex",alignItems:"center",gap:3,padding:"3px 5px",borderRadius:3,cursor:"pointer",background:sel?`${RC[reg]}12`:"rgba(255,255,255,0.015)",border:sel?`1px solid ${RC[reg]}50`:"1px solid rgba(255,255,255,0.03)",transition:"all 0.1s"}}>
-                              <span style={{fontSize:7,fontWeight:800,color:t.s<=4?RC[reg]:"var(--d)",width:12,textAlign:"center"}}>{t.s}</span>
-                              <span style={{fontSize:9,fontWeight:sel?800:600,color:sel?"#fff":"rgba(255,255,255,0.65)",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tm}</span>
-                              <span className="mn" style={{fontSize:7,fontWeight:700,color:wp>=0.6?"var(--green)":"var(--orange)"}}>{Math.round(wp*100)}</span>
+                            <div key={ti} onClick={()=>pick(key,tm)} style={{display:"flex",alignItems:"center",gap:3,padding:"3px 5px",borderRadius:5,cursor:"pointer",background:sel?`${RC[reg]}12`:"rgba(255,255,255,0.015)",border:sel?`1px solid ${RC[reg]}50`:"1px solid rgba(255,255,255,0.03)",transition:"all 0.1s"}}>
+                              <span style={{fontSize:15,fontWeight:800,color:t.s<=4?RC[reg]:"var(--d)",width:12,textAlign:"center"}}>{t.s}</span>
+                              <span style={{fontSize:14,fontWeight:sel?800:600,color:sel?"#fff":"rgba(255,255,255,0.65)",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tm}</span>
+                              <span className="mn" style={{fontSize:13,fontWeight:700,color:wp>=0.6?"var(--green)":"var(--orange)"}}>{Math.round(wp*100)}</span>
                             </div>
                           );
                         })}
@@ -849,12 +1301,12 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             })}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"center",minWidth:110}}>
               {(()=>{const k=`${reg}-3-0`;const w=brackets[bIdx].picks[k];
-                if(!w)return <div className="gl" style={{padding:16,textAlign:"center"}}><div style={{fontSize:9,color:"var(--d)"}}>Complete bracket to see champion</div></div>;
+                if(!w)return <div className="gl" style={{padding:20,textAlign:"center"}}><div style={{fontSize:14,color:"var(--d)"}}>Complete bracket to see champion</div></div>;
                 const t=T[w];
-                return <div className="gl" style={{padding:12,textAlign:"center",borderColor:`${RC[reg]}40`}}>
-                  <div style={{fontSize:8,fontWeight:700,color:RC[reg],letterSpacing:1,textTransform:"uppercase"}}>{RG[reg]} Champ</div>
-                  <div style={{fontSize:15,fontWeight:900,margin:"4px 0"}}>{w}</div>
-                  <div style={{fontSize:9,color:"var(--m)"}}>({t.s}) {t.rec}</div>
+                return <div className="gl" style={{padding:16,textAlign:"center",borderColor:`${RC[reg]}40`}}>
+                  <div style={{fontSize:15,fontWeight:700,color:RC[reg],letterSpacing:1,textTransform:"uppercase"}}>{RG[reg]} Champ</div>
+                  <div style={{fontSize:20,fontWeight:900,margin:"4px 0"}}>{w}</div>
+                  <div style={{fontSize:14,color:"var(--m)"}}>({t.s}) {t.rec}</div>
                 </div>;
               })()}
             </div>
@@ -866,39 +1318,39 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
       {tab==="value"&&(<div>
         {!simR?(
           <div className="gl fu" style={{padding:20,textAlign:"center"}}>
-            <p style={{fontSize:12,fontWeight:700,marginBottom:8}}>Run a simulation first to generate betting values</p>
-            <button onClick={()=>{doSim(10000);}} style={{padding:"10px 24px",borderRadius:8,background:"var(--acc)",color:"#fff",border:"none",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'DM Sans'"}}>Run 10k Sims</button>
+            <p style={{fontSize:14,fontWeight:700,marginBottom:16}}>Run a simulation first to generate betting values</p>
+            <button onClick={()=>{doSim(10000);}} style={{padding:"14px 32px",borderRadius:8,background:"var(--acc)",color:"#fff",border:"none",cursor:"pointer",fontSize:15,fontWeight:700,fontFamily:"'DM Sans'"}}>Run 10k Sims</button>
           </div>
         ):(
           <>
-            <div className="gl fu" style={{padding:14,marginBottom:12}}>
-              <div style={{fontSize:12,fontWeight:700,color:"#fff",marginBottom:4}}>Betting Value Finder</div>
-              <div style={{fontSize:10,color:"var(--m)",marginBottom:10,lineHeight:1.5}}>
+            <div className="gl fu" style={{padding:18,marginBottom:20}}>
+              <div style={{fontSize:14,fontWeight:700,color:"#fff",marginBottom:4}}>Betting Value Finder</div>
+              <div style={{fontSize:13,color:"var(--m)",marginBottom:18,lineHeight:1.5}}>
                 Compares our model's implied win probability vs Vegas lines. Positive edge = the model thinks the team is more likely to win than Vegas does. These are your best value plays.
               </div>
               <div style={{display:"flex",padding:"6px 0",borderBottom:"1px solid var(--b)",marginBottom:4}}>
-                <span style={{flex:2,fontSize:8,fontWeight:700,color:"var(--d)"}}>TEAM</span>
-                <span style={{width:45,fontSize:8,fontWeight:700,color:"var(--d)",textAlign:"center"}}>VEGAS</span>
-                <span style={{width:45,fontSize:8,fontWeight:700,color:"var(--d)",textAlign:"center"}}>MODEL</span>
-                <span style={{width:45,fontSize:8,fontWeight:700,color:"var(--d)",textAlign:"center"}}>EDGE</span>
+                <span style={{flex:2,fontSize:15,fontWeight:700,color:"var(--d)"}}>TEAM</span>
+                <span style={{width:45,fontSize:15,fontWeight:700,color:"var(--d)",textAlign:"center"}}>VEGAS</span>
+                <span style={{width:45,fontSize:15,fontWeight:700,color:"var(--d)",textAlign:"center"}}>MODEL</span>
+                <span style={{width:45,fontSize:15,fontWeight:700,color:"var(--d)",textAlign:"center"}}>EDGE</span>
               </div>
               {bettingValues.map((v,i)=>(
                 <div key={v.name} style={{display:"flex",alignItems:"center",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
                   <div style={{flex:2,display:"flex",alignItems:"center",gap:5}}>
-                    <div style={{width:16,height:16,borderRadius:3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:800,background:RC[v.reg],color:"#000"}}>{v.seed}</div>
-                    <div><div style={{fontSize:10,fontWeight:700}}>{v.name}</div><div style={{fontSize:7,color:"var(--m)"}}>{v.conf} · {v.vegasOdds}</div></div>
+                    <div style={{width:16,height:16,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,background:RC[v.reg],color:"#000"}}>{v.seed}</div>
+                    <div><div style={{fontSize:13,fontWeight:700}}>{v.name}</div><div style={{fontSize:13,color:"var(--m)"}}>{v.conf} · {v.vegasOdds}</div></div>
                   </div>
-                  <span className="mn" style={{width:45,textAlign:"center",fontSize:10,color:"var(--m)"}}>{v.vegasPct.toFixed(1)}%</span>
-                  <span className="mn" style={{width:45,textAlign:"center",fontSize:10,color:"#fff"}}>{v.modelPct.toFixed(1)}%</span>
-                  <span className="mn" style={{width:45,textAlign:"center",fontSize:10,fontWeight:800,color:v.edge>2?"var(--green)":v.edge>0?"var(--orange)":"var(--red)"}}>
+                  <span className="mn" style={{width:45,textAlign:"center",fontSize:13,color:"var(--m)"}}>{v.vegasPct.toFixed(1)}%</span>
+                  <span className="mn" style={{width:45,textAlign:"center",fontSize:13,color:"#fff"}}>{v.modelPct.toFixed(1)}%</span>
+                  <span className="mn" style={{width:45,textAlign:"center",fontSize:15,fontWeight:800,color:v.edge>2?"var(--green)":v.edge>0?"var(--orange)":"var(--red)"}}>
                     {v.edge>0?"+":""}{v.edge.toFixed(1)}%
                   </span>
                 </div>
               ))}
             </div>
             <div className="gl" style={{padding:12}}>
-              <div style={{fontSize:11,fontWeight:700,color:"var(--t2)",marginBottom:6}}>How to read this</div>
-              <div style={{fontSize:10,color:"var(--m)",lineHeight:1.6}}>
+              <div style={{fontSize:15,fontWeight:700,color:"var(--t2)",marginBottom:6}}>How to read this</div>
+              <div style={{fontSize:13,color:"var(--m)",lineHeight:1.6}}>
                 A positive edge means our model gives a team a higher championship probability than Vegas does — that's where the value is. The bigger the edge, the more "mispriced" the team is. Look for 2%+ edges on teams with strong underlying analytics.
               </div>
             </div>
@@ -908,35 +1360,35 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
       {/* ═══ AI STYLE CLASH TAB ═══ */}
       {tab==="clash"&&(<div>
-        <div className="gl fu" style={{padding:16,marginBottom:12}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <div className="gl fu" style={{padding:20,marginBottom:20}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
             
             <span style={{fontSize:13,fontWeight:800,letterSpacing:-0.2}}>AI Matchup Analysis</span>
           </div>
-          <div style={{display:"flex",gap:6,marginBottom:10}}>
-            <select value={cmpA} onChange={e=>setCmpA(e.target.value)} style={{flex:1,padding:"7px",borderRadius:6,background:"var(--s2)",color:"#fff",border:"1px solid var(--b)",fontSize:10}}>
+          <div style={{display:"flex",gap:12,marginBottom:18}}>
+            <select value={cmpA} onChange={e=>setCmpA(e.target.value)} style={{flex:1,padding:"7px",borderRadius:8,background:"var(--s2)",color:"#fff",border:"1px solid var(--b)",fontSize:16}}>
               {allNames.map(t=><option key={t} value={t}>({T[t].s}) {t}</option>)}
             </select>
-            <div style={{display:"flex",alignItems:"center",fontSize:10,fontWeight:800,color:"var(--d)"}}>VS</div>
-            <select value={cmpB} onChange={e=>setCmpB(e.target.value)} style={{flex:1,padding:"7px",borderRadius:6,background:"var(--s2)",color:"#fff",border:"1px solid var(--b)",fontSize:10}}>
+            <div style={{display:"flex",alignItems:"center",fontSize:15,fontWeight:800,color:"var(--d)"}}>VS</div>
+            <select value={cmpB} onChange={e=>setCmpB(e.target.value)} style={{flex:1,padding:"7px",borderRadius:8,background:"var(--s2)",color:"#fff",border:"1px solid var(--b)",fontSize:16}}>
               {allNames.map(t=><option key={t} value={t}>({T[t].s}) {t}</option>)}
             </select>
           </div>
-          <button onClick={runAI} disabled={aiLoading} style={{width:"100%",padding:"10px",borderRadius:8,fontSize:11,fontWeight:700,background:aiLoading?"var(--s2)":"linear-gradient(135deg,#7c8db5,#7c5ce0)",color:aiLoading?"var(--m)":"#fff",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.2s",letterSpacing:0.2}}>
+          <button onClick={runAI} disabled={aiLoading} style={{width:"100%",padding:"10px",borderRadius:8,fontSize:15,fontWeight:700,background:aiLoading?"var(--s2)":"linear-gradient(135deg,#7c8db5,#7c5ce0)",color:aiLoading?"var(--m)":"#fff",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.2s",letterSpacing:0.2}}>
             {aiLoading?"Analyzing matchup...":"Run AI Analysis →"}
           </button>
         </div>
 
         {/* Radar + Style Clash */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
           {[cmpA,cmpB].map(n=>{const t=T[n];if(!t)return null;const ac=RC[t.r];
             const data=[{s:"OFF",v:t.off},{s:"DEF",v:t.def},{s:"REB",v:t.reb},{s:"SOS",v:t.sos},{s:"CLT",v:t.clutch},{s:"PIR",v:t.starPIR}];
             return(
               <div key={n} className="gl" style={{padding:10}}>
-                <div style={{fontSize:10,fontWeight:800,color:ac}}>({t.s}) {n}</div>
-                <div style={{fontSize:8,color:"var(--m)"}}>{t.rec} · {t.style} / {t.defStyle}</div>
+                <div style={{fontSize:15,fontWeight:800,color:ac}}>({t.s}) {n}</div>
+                <div style={{fontSize:14,color:"var(--m)"}}>{t.rec} · {t.style} / {t.defStyle}</div>
                 <ResponsiveContainer width="100%" height={130}>
-                  <RadarChart data={data}><PolarGrid stroke="rgba(255,255,255,0.06)"/><PolarAngleAxis dataKey="s" tick={{fill:"rgba(255,255,255,0.35)",fontSize:7}}/><Radar dataKey="v" stroke={ac} fill={ac} fillOpacity={0.12} strokeWidth={2}/></RadarChart>
+                  <RadarChart data={data}><PolarGrid stroke="rgba(255,255,255,0.06)"/><PolarAngleAxis dataKey="s" tick={{fill:"rgba(255,255,255,0.35)",fontSize:16}}/><Radar dataKey="v" stroke={ac} fill={ac} fillOpacity={0.12} strokeWidth={2}/></RadarChart>
                 </ResponsiveContainer>
               </div>
             );
@@ -946,18 +1398,18 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
         {/* Style clash breakdown */}
         {(()=>{const sc=getStyleClash(cmpA,cmpB);if(!sc)return null;
           return(
-            <div className="gl fu" style={{padding:14,marginBottom:12}}>
-              <div style={{fontSize:11,fontWeight:700,color:"var(--t2)",marginBottom:8}}>Style Clash Breakdown</div>
+            <div className="gl fu" style={{padding:18,marginBottom:20}}>
+              <div style={{fontSize:15,fontWeight:700,color:"var(--t2)",marginBottom:20}}>Style Clash Breakdown</div>
               {[{l:"Tempo",v:sc.tempoEdge,c:"var(--acc)"},{l:"Offensive Style",v:sc.styleMatch,c:"var(--orange)"},{l:"Defensive Schemes",v:sc.defMatch,c:"#7c8db5"},{l:"Rebounding Edge",v:sc.rebEdge,c:"var(--green)"}].map((item,i)=>(
                 <div key={i} style={{marginBottom:6}}>
-                  <div style={{fontSize:8,fontWeight:700,color:item.c,letterSpacing:0.5,textTransform:"uppercase"}}>{item.l}</div>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,0.65)",lineHeight:1.4}}>{item.v}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:item.c,letterSpacing:0.5,textTransform:"uppercase"}}>{item.l}</div>
+                  <div style={{fontSize:13,color:"rgba(255,255,255,0.65)",lineHeight:1.4}}>{item.v}</div>
                 </div>
               ))}
               <div style={{textAlign:"center",marginTop:10,padding:"8px",background:"rgba(255,255,255,0.02)",borderRadius:8}}>
-                <span className="mn" style={{fontSize:18,fontWeight:800,color:RC[T[cmpA]?.r]}}>{Math.round(getWP(cmpA,cmpB)*100)}%</span>
-                <span style={{fontSize:10,color:"var(--d)",margin:"0 8px"}}>—</span>
-                <span className="mn" style={{fontSize:18,fontWeight:800,color:RC[T[cmpB]?.r]}}>{Math.round((1-getWP(cmpA,cmpB))*100)}%</span>
+                <span className="mn" style={{fontSize:20,fontWeight:800,color:RC[T[cmpA]?.r]}}>{Math.round(getWP(cmpA,cmpB)*100)}%</span>
+                <span style={{fontSize:13,color:"var(--d)",margin:"0 8px"}}>—</span>
+                <span className="mn" style={{fontSize:20,fontWeight:800,color:RC[T[cmpB]?.r]}}>{Math.round((1-getWP(cmpA,cmpB))*100)}%</span>
               </div>
             </div>
           );
@@ -965,14 +1417,14 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
         {/* AI results */}
         {aiRes&&(
-          <div className="gl fu" style={{padding:14,borderColor:"rgba(139,92,246,0.3)"}}>
-            <div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,color:"#7c8db5",textTransform:"uppercase",marginBottom:8}}>Claude's Analysis</div>
-            <div style={{textAlign:"center",marginBottom:10}}>
-              <span style={{fontSize:16,fontWeight:900}}>{aiRes.winner}</span>
-              <span className="mn" style={{fontSize:12,fontWeight:700,color:"var(--green)",marginLeft:8}}>{aiRes.winPct}%</span>
+          <div className="gl fu" style={{padding:18,borderColor:"rgba(139,92,246,0.3)"}}>
+            <div style={{fontSize:14,fontWeight:700,letterSpacing:1.5,color:"#7c8db5",textTransform:"uppercase",marginBottom:20}}>Claude's Analysis</div>
+            <div style={{textAlign:"center",marginBottom:18}}>
+              <span style={{fontSize:13,fontWeight:900}}>{aiRes.winner}</span>
+              <span className="mn" style={{fontSize:14,fontWeight:700,color:"var(--green)",marginLeft:8}}>{aiRes.winPct}%</span>
             </div>
             {[{l:"Key Matchup",v:aiRes.keyMatchup,c:"var(--acc)"},{l:"Style Factor",v:aiRes.styleFactor,c:"#7c8db5"},{l:"Star Watch",v:aiRes.starWatch,c:"var(--orange)"},{l:"Upset Recipe",v:aiRes.upsetRecipe,c:"var(--red)"},{l:"Injury Impact",v:aiRes.injury_impact,c:"#ec4899"},{l:"Prediction",v:aiRes.prediction,c:"var(--green)"}].map((item,i)=>(
-              <div key={i} style={{marginBottom:6}}><div style={{fontSize:8,fontWeight:700,color:item.c,textTransform:"uppercase",letterSpacing:0.5}}>{item.l}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.65)",lineHeight:1.5}}>{item.v}</div></div>
+              <div key={i} style={{marginBottom:6}}><div style={{fontSize:15,fontWeight:700,color:item.c,textTransform:"uppercase",letterSpacing:0.5}}>{item.l}</div><div style={{fontSize:13,color:"rgba(255,255,255,0.65)",lineHeight:1.5}}>{item.v}</div></div>
             ))}
           </div>
         )}
@@ -980,33 +1432,33 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
       {/* ═══ PLAYER IMPACT TAB ═══ */}
       {tab==="players"&&(<div>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:4}}>
           
-          <span style={{fontSize:15,fontWeight:800,letterSpacing:-0.3,color:"#fff"}}>Star Player Impact</span>
+          <span style={{fontSize:20,fontWeight:800,letterSpacing:-0.3,color:"#fff"}}>Star Player Impact</span>
         </div>
-        <p style={{fontSize:10,color:"var(--m)",marginBottom:14,lineHeight:1.5,paddingLeft:11}}>
+        <p style={{fontSize:13,color:"var(--m)",marginBottom:18,lineHeight:1.5,paddingLeft:11}}>
           Players ranked by PIR — composite of scoring, efficiency, defense, clutch, and win-share. Injury flags show tournament impact.
         </p>
         {Object.entries(T).filter(([,t])=>t.starPIR>=70).sort((a,b)=>b[1].starPIR-a[1].starPIR).map(([name,t])=>(
-          <div key={name} className="gl" style={{padding:12,marginBottom:8}}>
+          <div key={name} className="gl" style={{padding:16,marginBottom:20}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
               <div>
-                <div style={{fontSize:12,fontWeight:800,color:RC[t.r]}}>{t.star||name}</div>
-                <div style={{fontSize:9,color:"var(--m)"}}>({t.s}) {name} · {t.c}</div>
-                {t.starLine&&<div className="mn" style={{fontSize:9,color:"rgba(255,255,255,0.55)",marginTop:2}}>{t.starLine}</div>}
+                <div style={{fontSize:14,fontWeight:800,color:RC[t.r]}}>{t.star||name}</div>
+                <div style={{fontSize:14,color:"var(--m)"}}>({t.s}) {name} · {t.c}</div>
+                {t.starLine&&<div className="mn" style={{fontSize:14,color:"rgba(255,255,255,0.55)",marginTop:2}}>{t.starLine}</div>}
               </div>
-              <div style={{textAlign:"center",background:`${RC[t.r]}12`,borderRadius:8,padding:"4px 10px",border:`1px solid ${RC[t.r]}30`}}>
-                <div className="mn" style={{fontSize:16,fontWeight:800,color:RC[t.r]}}>{t.starPIR}</div>
-                <div style={{fontSize:7,color:"var(--d)"}}>PIR</div>
+              <div style={{textAlign:"center",background:`${RC[t.r]}12`,borderRadius:8,padding:"6px 12px",border:`1px solid ${RC[t.r]}30`}}>
+                <div className="mn" style={{fontSize:13,fontWeight:800,color:RC[t.r]}}>{t.starPIR}</div>
+                <div style={{fontSize:13,color:"var(--d)"}}>PIR</div>
               </div>
             </div>
-            {t.inj&&<div style={{fontSize:9,color:"var(--red)",fontWeight:700,marginTop:6,padding:"3px 6px",background:"rgba(239,68,68,0.08)",borderRadius:4,display:"inline-block"}}>{t.inj}</div>}
-            <div style={{fontSize:9,color:"var(--m)",marginTop:4,lineHeight:1.4}}>{t.note}</div>
-            <div style={{display:"flex",gap:4,marginTop:6}}>
+            {t.inj&&<div style={{fontSize:14,color:"var(--red)",fontWeight:700,marginTop:6,padding:"3px 6px",background:"rgba(239,68,68,0.08)",borderRadius:6,display:"inline-block"}}>{t.inj}</div>}
+            <div style={{fontSize:14,color:"var(--m)",marginTop:4,lineHeight:1.4}}>{t.note}</div>
+            <div style={{display:"flex",gap:12,marginTop:6}}>
               {[{l:"OFF",v:t.off},{l:"CLT",v:t.clutch},{l:"DEF",v:t.def}].map(s=>(
                 <div key={s.l} style={{flex:1,textAlign:"center",padding:"3px",background:"rgba(255,255,255,0.02)",borderRadius:4}}>
-                  <div style={{fontSize:7,color:"var(--d)"}}>{s.l}</div>
-                  <div className="mn" style={{fontSize:10,fontWeight:700,color:s.v>=85?"var(--green)":s.v>=70?"var(--acc)":"var(--m)"}}>{s.v}</div>
+                  <div style={{fontSize:13,color:"var(--d)"}}>{s.l}</div>
+                  <div className="mn" style={{fontSize:13,fontWeight:700,color:s.v>=85?"var(--green)":s.v>=70?"var(--acc)":"var(--m)"}}>{s.v}</div>
                 </div>
               ))}
             </div>
@@ -1016,37 +1468,37 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
       {/* ═══ CONFERENCE POWER INDEX ═══ */}
       {tab==="conf"&&(<div>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:4}}>
           
-          <span style={{fontSize:15,fontWeight:800,letterSpacing:-0.3,color:"#fff"}}>Conference Power Index</span>
+          <span style={{fontSize:20,fontWeight:800,letterSpacing:-0.3,color:"#fff"}}>Conference Power Index</span>
         </div>
-        <p style={{fontSize:10,color:"var(--m)",marginBottom:14,lineHeight:1.5,paddingLeft:11}}>
+        <p style={{fontSize:13,color:"var(--m)",marginBottom:18,lineHeight:1.5,paddingLeft:11}}>
           Historical performance by conference. Seed Factor below 1.0 = historically underseeded (outperforms). Above 1.0 = overseeded.
         </p>
         {Object.entries(CONF_PI).sort((a,b)=>b[1].teams-a[1].teams).map(([conf,d])=>(
-          <div key={conf} className="gl" style={{padding:12,marginBottom:8}}>
+          <div key={conf} className="gl" style={{padding:16,marginBottom:20}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
               <div>
                 <div style={{fontSize:13,fontWeight:800}}>{conf}</div>
-                <div style={{fontSize:9,color:"var(--m)"}}>{d.teams} teams in field</div>
+                <div style={{fontSize:14,color:"var(--m)"}}>{d.teams} teams in field</div>
               </div>
               <div style={{display:"flex",gap:8}}>
                 <div style={{textAlign:"center"}}>
-                  <div className="mn" style={{fontSize:12,fontWeight:800,color:d.overSeed<1.0?"var(--green)":"var(--red)"}}>{d.overSeed.toFixed(2)}</div>
-                  <div style={{fontSize:7,color:"var(--d)"}}>Seed Factor</div>
+                  <div className="mn" style={{fontSize:14,fontWeight:800,color:d.overSeed<1.0?"var(--green)":"var(--red)"}}>{d.overSeed.toFixed(2)}</div>
+                  <div style={{fontSize:13,color:"var(--d)"}}>Seed Factor</div>
                 </div>
                 <div style={{textAlign:"center"}}>
-                  <div className="mn" style={{fontSize:12,fontWeight:800,color:"var(--acc)"}}>{d.histFF}</div>
-                  <div style={{fontSize:7,color:"var(--d)"}}>Hist F4</div>
+                  <div className="mn" style={{fontSize:14,fontWeight:800,color:"var(--acc)"}}>{d.histFF}</div>
+                  <div style={{fontSize:13,color:"var(--d)"}}>Hist F4</div>
                 </div>
                 <div style={{textAlign:"center"}}>
-                  <div className="mn" style={{fontSize:12,fontWeight:800,color:"var(--orange)"}}>{d.histChamp}</div>
-                  <div style={{fontSize:7,color:"var(--d)"}}>Titles</div>
+                  <div className="mn" style={{fontSize:14,fontWeight:800,color:"var(--orange)"}}>{d.histChamp}</div>
+                  <div style={{fontSize:13,color:"var(--d)"}}>Titles</div>
                 </div>
               </div>
             </div>
-            <div style={{fontSize:9,color:"var(--m)",lineHeight:1.4}}>{d.note}</div>
-            <div style={{marginTop:6,height:4,background:"rgba(255,255,255,0.04)",borderRadius:2,overflow:"hidden"}}>
+            <div style={{fontSize:14,color:"var(--m)",lineHeight:1.4}}>{d.note}</div>
+            <div style={{marginTop:6,height:6,background:"rgba(255,255,255,0.04)",borderRadius:2,overflow:"hidden"}}>
               <div style={{width:`${d.avgSeedPerf*50}%`,height:"100%",background:d.avgSeedPerf>=1.05?"var(--green)":d.avgSeedPerf>=0.95?"var(--orange)":"var(--red)",borderRadius:2}}/>
             </div>
           </div>
@@ -1056,45 +1508,45 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
       {/* ═══ LIVE TRACKER TAB ═══ */}
       {tab==="tracker"&&(<div>
         {/* Web Search Update Button */}
-        <div className="gl fu" style={{padding:16,marginBottom:14,background:"linear-gradient(135deg,rgba(61,214,140,0.03),rgba(74,158,255,0.03))"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div className="gl fu" style={{padding:20,marginBottom:18,background:"linear-gradient(135deg,rgba(61,214,140,0.03),rgba(74,158,255,0.03))"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
             <div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 
-                <span style={{fontSize:14,fontWeight:800,letterSpacing:-0.2}}>Live Tournament Tracker</span>
+                <span style={{fontSize:15,fontWeight:800,letterSpacing:-0.2}}>Live Tournament Tracker</span>
               </div>
-              <div style={{fontSize:9,color:"var(--m)",marginTop:3,paddingLeft:11}}>Web-search powered · Manual entry · Auto-scoring</div>
+              <div style={{fontSize:14,color:"var(--m)",marginTop:5,paddingLeft:11}}>Web-search powered · Manual entry · Auto-scoring</div>
             </div>
-            <button onClick={fetchLatest} disabled={fetchLoading} style={{padding:"9px 18px",borderRadius:8,fontSize:10,fontWeight:700,background:fetchLoading?"var(--s2)":"linear-gradient(135deg,var(--green),#2bb870)",color:fetchLoading?"var(--m)":"#000",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.15s",letterSpacing:0.2}}>
+            <button onClick={fetchLatest} disabled={fetchLoading} style={{padding:"9px 18px",borderRadius:8,fontSize:13,fontWeight:700,background:fetchLoading?"var(--s2)":"linear-gradient(135deg,var(--green),#2bb870)",color:fetchLoading?"var(--m)":"#000",border:"none",cursor:"pointer",fontFamily:"'DM Sans'",transition:"all 0.15s",letterSpacing:0.2}}>
               {fetchLoading?"Searching...":"Fetch Scores →"}
             </button>
           </div>
-          {fetchMsg&&<div style={{fontSize:10,color:fetchMsg.startsWith("")?"var(--green)":fetchMsg.startsWith("")?"var(--orange)":"var(--m)",padding:"6px 8px",borderRadius:6,background:"rgba(255,255,255,0.02)",lineHeight:1.5}}>{fetchMsg}</div>}
+          {fetchMsg&&<div style={{fontSize:13,color:fetchMsg.startsWith("")?"var(--green)":fetchMsg.startsWith("")?"var(--orange)":"var(--m)",padding:"6px 8px",borderRadius:8,background:"rgba(255,255,255,0.02)",lineHeight:1.5}}>{fetchMsg}</div>}
         </div>
 
         {/* Bracket Scoreboard */}
-        <div className="gl fu" style={{padding:14,marginBottom:12}}>
-          <div style={{fontSize:9,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:8}}>Bracket Scoreboard</div>
+        <div className="gl fu" style={{padding:18,marginBottom:20}}>
+          <div style={{fontSize:14,fontWeight:700,fontWeight:700,color:"var(--t2)",marginBottom:20}}>Bracket Scoreboard</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
             {brackets.map((b,i)=>{
               const sc=scoreBracket(b.picks);const totalResults=Object.keys(results).length;
               const pct=sc.correct+sc.wrong>0?Math.round(sc.correct/(sc.correct+sc.wrong)*100):0;
               return(
-                <div key={i} className="gl" style={{padding:10,textAlign:"center",borderColor:i===0?"var(--acc)40":i===1?"var(--green)40":"var(--red)40"}}>
-                  <div style={{fontSize:10,fontWeight:700,color:i===0?"var(--acc)":i===1?"var(--green)":"var(--red)"}}>{b.name}</div>
-                  <div className="mn" style={{fontSize:22,fontWeight:900,color:"#fff",margin:"4px 0"}}>{sc.pts}</div>
-                  <div style={{fontSize:8,color:"var(--d)"}}>points</div>
-                  <div style={{display:"flex",justifyContent:"center",gap:8,marginTop:6}}>
-                    <div><span className="mn" style={{fontSize:11,color:"var(--green)",fontWeight:700}}>{sc.correct}</span><span style={{fontSize:7,color:"var(--d)"}}> ✓</span></div>
-                    <div><span className="mn" style={{fontSize:11,color:"var(--red)",fontWeight:700}}>{sc.wrong}</span><span style={{fontSize:7,color:"var(--d)"}}> ✗</span></div>
-                    <div><span className="mn" style={{fontSize:11,color:"var(--m)",fontWeight:700}}>{sc.pending}</span><span style={{fontSize:7,color:"var(--d)"}}> ?</span></div>
+                <div key={i} className="gl" style={{padding:14,textAlign:"center",borderColor:i===0?"var(--acc)40":i===1?"var(--green)40":"var(--red)40"}}>
+                  <div style={{fontSize:13,fontWeight:700,color:i===0?"var(--acc)":i===1?"var(--green)":"var(--red)"}}>{b.name}</div>
+                  <div className="mn" style={{fontSize:24,fontWeight:900,color:"#fff",margin:"4px 0"}}>{sc.pts}</div>
+                  <div style={{fontSize:14,color:"var(--d)"}}>points</div>
+                  <div style={{display:"flex",justifyContent:"center",gap:12,marginTop:6}}>
+                    <div><span className="mn" style={{fontSize:14,color:"var(--green)",fontWeight:700}}>{sc.correct}</span><span style={{fontSize:13,color:"var(--d)"}}> ✓</span></div>
+                    <div><span className="mn" style={{fontSize:14,color:"var(--red)",fontWeight:700}}>{sc.wrong}</span><span style={{fontSize:13,color:"var(--d)"}}> ✗</span></div>
+                    <div><span className="mn" style={{fontSize:14,color:"var(--m)",fontWeight:700}}>{sc.pending}</span><span style={{fontSize:13,color:"var(--d)"}}> ?</span></div>
                   </div>
                   {sc.correct+sc.wrong>0&&(
                     <div style={{marginTop:4}}>
-                      <div style={{height:4,background:"rgba(255,255,255,0.04)",borderRadius:2,overflow:"hidden"}}>
+                      <div style={{height:6,background:"rgba(255,255,255,0.04)",borderRadius:2,overflow:"hidden"}}>
                         <div style={{width:`${pct}%`,height:"100%",background:pct>=70?"var(--green)":pct>=50?"var(--orange)":"var(--red)",borderRadius:2}}/>
                       </div>
-                      <div style={{fontSize:8,color:"var(--m)",marginTop:2}}>{pct}% accuracy</div>
+                      <div style={{fontSize:14,color:"var(--m)",marginTop:2}}>{pct}% accuracy</div>
                     </div>
                   )}
                 </div>
@@ -1104,23 +1556,23 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
         </div>
 
         {/* Round Selector */}
-        <div style={{display:"flex",gap:3,marginBottom:10}}>
+        <div style={{display:"flex",gap:3,marginBottom:18}}>
           {["R64","R32","S16","E8","F4","Final"].map((label,i)=>{
             const roundResults=Object.keys(results).filter(k=>parseInt(k.split("-")[1])===i).length;
             const roundTotal={0:32,1:16,2:8,3:4,4:2,5:1}[i];
             const complete=roundResults>=(roundTotal||0);
             return(
-              <button key={i} onClick={()=>setTrkRound(i)} style={{flex:1,padding:"6px 2px",borderRadius:6,fontSize:8,fontWeight:700,background:trkRound===i?"rgba(255,255,255,0.1)":"transparent",color:trkRound===i?"#fff":"var(--m)",border:complete?`1px solid var(--green)40`:`1px solid var(--b)`,cursor:"pointer",fontFamily:"'DM Sans'",textTransform:"uppercase"}}>
+              <button key={i} onClick={()=>setTrkRound(i)} style={{flex:1,padding:"6px 2px",borderRadius:8,fontSize:15,fontWeight:700,background:trkRound===i?"rgba(255,255,255,0.1)":"transparent",color:trkRound===i?"#fff":"var(--m)",border:complete?`1px solid var(--green)40`:`1px solid var(--b)`,cursor:"pointer",fontFamily:"'DM Sans'",textTransform:"uppercase"}}>
                 {label}<br/>
-                <span className="mn" style={{fontSize:7,color:complete?"var(--green)":"var(--d)"}}>{roundResults}/{roundTotal}</span>
+                <span className="mn" style={{fontSize:13,color:complete?"var(--green)":"var(--d)"}}>{roundResults}/{roundTotal}</span>
               </button>
             );
           })}
         </div>
 
         {/* Game Results Entry + Bracket Tracking */}
-        <div style={{marginBottom:12}}>
-          <div style={{fontSize:9,fontWeight:700,letterSpacing:1,color:"var(--m)",textTransform:"uppercase",marginBottom:8}}>
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:14,fontWeight:700,letterSpacing:1,color:"var(--m)",textTransform:"uppercase",marginBottom:20}}>
             {["Round of 64","Round of 32","Sweet 16","Elite Eight","Final Four","Championship"][trkRound]} — Tap winner to log result
           </div>
 
@@ -1131,9 +1583,9 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               const prevGames=getGamesForRound(trkRound-1);
               const prevComplete=prevGames.length>0&&prevGames.every(g=>results[g.key]);
               if(!prevComplete)return(
-                <div className="gl" style={{padding:16,textAlign:"center"}}>
-                  <div style={{fontSize:11,color:"var(--m)"}}>Complete the previous round first to unlock this round.</div>
-                  <div style={{fontSize:9,color:"var(--d)",marginTop:4}}>Go to {["Round of 64","Round of 32","Sweet 16","Elite Eight","Final Four"][trkRound-1]} and enter all results.</div>
+                <div className="gl" style={{padding:20,textAlign:"center"}}>
+                  <div style={{fontSize:14,color:"var(--m)"}}>Complete the previous round first to unlock this round.</div>
+                  <div style={{fontSize:14,color:"var(--d)",marginTop:4}}>Go to {["Round of 64","Round of 32","Sweet 16","Elite Eight","Final Four"][trkRound-1]} and enter all results.</div>
                 </div>
               );
             }
@@ -1143,41 +1595,49 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               // Check each bracket's pick for this game
               const bracketPicks=brackets.map(b=>b.picks[g.key]);
               return(
-                <div key={gi} className="gl" style={{padding:10,marginBottom:6,borderLeft:result?`3px solid var(--green)`:`3px solid var(--b)`}}>
-                  <div style={{display:"flex",gap:4,marginBottom:6}}>
-                    <span style={{fontSize:8,fontWeight:700,color:RC[g.region],letterSpacing:0.5}}>{RG[g.region]}</span>
-                    {result&&<span style={{fontSize:8,fontWeight:700,color:"var(--green)"}}>✓ FINAL</span>}
+                <div key={gi} className="gl" style={{padding:14,marginBottom:6,borderLeft:result?`3px solid var(--green)`:`3px solid var(--b)`}}>
+                  <div style={{display:"flex",gap:12,marginBottom:6}}>
+                    <span style={{fontSize:15,fontWeight:700,color:RC[g.region],letterSpacing:0.5}}>{RG[g.region]}</span>
+                    {result&&<span style={{fontSize:15,fontWeight:700,color:"var(--green)"}}>✓ FINAL</span>}
                   </div>
                   <div style={{display:"flex",gap:4}}>
                     {/* Team A */}
-                    <div onClick={()=>markResult(g.key,g.a)} style={{flex:1,padding:"8px",borderRadius:6,cursor:"pointer",textAlign:"center",
-                      background:result===g.a?"rgba(34,197,94,0.1)":!result?"rgba(255,255,255,0.02)":"rgba(239,68,68,0.05)",
-                      border:result===g.a?"1px solid var(--green)40":!result?"1px solid var(--b)":"1px solid rgba(239,68,68,0.15)",
+                    <div onClick={()=>{const m=prompt(`${g.a} wins by how many points? (Enter number, or leave blank to skip margin)`);markResult(g.key,g.a,m?parseInt(m)||null:null);}} style={{flex:1,padding:"8px",borderRadius:8,cursor:"pointer",textAlign:"center",
+                      background:result===g.a?"rgba(47,189,96,0.1)":!result?"rgba(255,255,255,0.02)":"rgba(229,69,61,0.05)",
+                      border:result===g.a?"1px solid rgba(47,189,96,0.25)":!result?"1px solid var(--b)":"1px solid rgba(229,69,61,0.12)",
                       transition:"all 0.15s"}}>
-                      <div style={{fontSize:9,fontWeight:800,color:RC[ta?.r||g.region]}}>({ta?.s})</div>
-                      <div style={{fontSize:11,fontWeight:result===g.a?900:600,color:result===g.a?"var(--green)":result?"var(--d)":"#fff"}}>{g.a}</div>
-                      <div className="mn" style={{fontSize:8,color:"var(--d)",marginTop:2}}>{Math.round(wp*100)}%</div>
+                      <div style={{fontSize:14,fontWeight:800,color:RC[ta?.r||g.region]}}>({ta?.s})</div>
+                      <div style={{fontSize:26,fontWeight:result===g.a?900:600,color:result===g.a?"var(--green)":result?"var(--d)":"#fff"}}>{g.a}</div>
+                      <div className="mn" style={{fontSize:14,color:"var(--d)",marginTop:2}}>{Math.round(wp*100)}%</div>
                     </div>
-                    <div style={{display:"flex",alignItems:"center",fontSize:8,color:"var(--d)",fontWeight:800}}>VS</div>
+                    <div style={{display:"flex",alignItems:"center",fontSize:14,color:"var(--d)",fontWeight:800}}>VS</div>
                     {/* Team B */}
-                    <div onClick={()=>markResult(g.key,g.b)} style={{flex:1,padding:"8px",borderRadius:6,cursor:"pointer",textAlign:"center",
-                      background:result===g.b?"rgba(34,197,94,0.1)":!result?"rgba(255,255,255,0.02)":"rgba(239,68,68,0.05)",
-                      border:result===g.b?"1px solid var(--green)40":!result?"1px solid var(--b)":"1px solid rgba(239,68,68,0.15)",
+                    <div onClick={()=>{const m=prompt(`${g.b} wins by how many points? (Enter number, or leave blank to skip margin)`);markResult(g.key,g.b,m?parseInt(m)||null:null);}} style={{flex:1,padding:"8px",borderRadius:8,cursor:"pointer",textAlign:"center",
+                      background:result===g.b?"rgba(47,189,96,0.1)":!result?"rgba(255,255,255,0.02)":"rgba(229,69,61,0.05)",
+                      border:result===g.b?"1px solid rgba(47,189,96,0.25)":!result?"1px solid var(--b)":"1px solid rgba(229,69,61,0.12)",
                       transition:"all 0.15s"}}>
-                      <div style={{fontSize:9,fontWeight:800,color:RC[tb?.r||g.region]}}>({tb?.s})</div>
-                      <div style={{fontSize:11,fontWeight:result===g.b?900:600,color:result===g.b?"var(--green)":result?"var(--d)":"#fff"}}>{g.b}</div>
-                      <div className="mn" style={{fontSize:8,color:"var(--d)",marginTop:2}}>{Math.round((1-wp)*100)}%</div>
+                      <div style={{fontSize:14,fontWeight:800,color:RC[tb?.r||g.region]}}>({tb?.s})</div>
+                      <div style={{fontSize:26,fontWeight:result===g.b?900:600,color:result===g.b?"var(--green)":result?"var(--d)":"#fff"}}>{g.b}</div>
+                      <div className="mn" style={{fontSize:14,color:"var(--d)",marginTop:2}}>{Math.round((1-wp)*100)}%</div>
                     </div>
                   </div>
+                  {/* Margin display */}
+                  {result&&margins[result]&&margins[result].wins.length>0&&(
+                    <div style={{textAlign:"center",marginTop:4}}>
+                      <span className="mn" style={{fontSize:14,color:"var(--m)"}}>Won by {margins[result].wins[margins[result].wins.length-1]} pts</span>
+                      {margins[result].wins[margins[result].wins.length-1]>=20&&<span className="tag" style={{marginLeft:6,background:"rgba(47,189,96,0.1)",color:"var(--green)"}}>DOMINANT</span>}
+                      {margins[result].wins[margins[result].wins.length-1]<=4&&<span className="tag" style={{marginLeft:6,background:"rgba(245,166,35,0.1)",color:"var(--orange)"}}>CLOSE CALL</span>}
+                    </div>
+                  )}
                   {/* Bracket pick check */}
                   {result&&(
-                    <div style={{display:"flex",gap:4,marginTop:6}}>
+                    <div style={{display:"flex",gap:12,marginTop:6}}>
                       {brackets.map((b,bi)=>{
                         const pick=b.picks[g.key];const correct=pick===result;
                         return(
-                          <div key={bi} style={{flex:1,textAlign:"center",padding:"3px",borderRadius:4,background:!pick?"rgba(255,255,255,0.02)":correct?"rgba(34,197,94,0.08)":"rgba(239,68,68,0.08)",border:`1px solid ${!pick?"var(--b)":correct?"var(--green)30":"var(--red)30"}`}}>
-                            <div style={{fontSize:7,color:"var(--d)"}}>{b.name}</div>
-                            <div style={{fontSize:8,fontWeight:700,color:!pick?"var(--d)":correct?"var(--green)":"var(--red)"}}>
+                          <div key={bi} style={{flex:1,textAlign:"center",padding:"3px",borderRadius:6,background:!pick?"rgba(255,255,255,0.02)":correct?"rgba(34,197,94,0.08)":"rgba(239,68,68,0.08)",border:`1px solid ${!pick?"var(--b)":correct?"var(--green)30":"var(--red)30"}`}}>
+                            <div style={{fontSize:13,color:"var(--d)"}}>{b.name}</div>
+                            <div style={{fontSize:15,fontWeight:700,color:!pick?"var(--d)":correct?"var(--green)":"var(--red)"}}>
                               {!pick?"—":correct?"✓":"✗"} {pick?pick.length>8?pick.slice(0,7)+"…":pick:""}
                             </div>
                           </div>
@@ -1200,30 +1660,30 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
           if(nextGames.length===0)return null;
           const nextLabel=["Round of 32","Sweet 16","Elite Eight","Final Four","Championship",""][trkRound+1];
           return(
-            <div className="gl fu" style={{padding:14,background:"linear-gradient(135deg,rgba(139,92,246,0.04),rgba(59,130,246,0.04))",borderColor:"rgba(139,92,246,0.2)"}}>
-              <div style={{fontSize:9,fontWeight:700,letterSpacing:1.5,color:"#7c8db5",textTransform:"uppercase",marginBottom:4}}>Auto-Predictions: {nextLabel}</div>
-              <div style={{fontSize:10,color:"var(--m)",marginBottom:10,lineHeight:1.4}}>Based on actual results, here's who the model predicts for the next round:</div>
+            <div className="gl fu" style={{padding:18,background:"linear-gradient(135deg,rgba(139,92,246,0.04),rgba(59,130,246,0.04))",borderColor:"rgba(139,92,246,0.2)"}}>
+              <div style={{fontSize:14,fontWeight:700,letterSpacing:1.5,color:"#7c8db5",textTransform:"uppercase",marginBottom:4}}>Auto-Predictions: {nextLabel}</div>
+              <div style={{fontSize:13,color:"var(--m)",marginBottom:18,lineHeight:1.4}}>Based on actual results, here's who the model predicts for the next round:</div>
               {nextGames.map((g,i)=>{
                 const pred=getGamePrediction(g.a,g.b);if(!pred)return null;
                 return(
-                  <div key={i} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
                     <div style={{width:4,height:28,borderRadius:2,background:RC[g.region]}}/>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:10,fontWeight:700}}>
+                      <div style={{fontSize:13,fontWeight:700}}>
                         <span style={{color:RC[g.region]}}>({T[g.a]?.s})</span> {g.a} vs <span style={{color:RC[g.region]}}>({T[g.b]?.s})</span> {g.b}
                       </div>
-                      <div style={{fontSize:9,color:"var(--m)",marginTop:1}}>
+                      <div style={{fontSize:14,color:"var(--m)",marginTop:1}}>
                         {pred.reasons[0]}
                       </div>
                     </div>
                     <div style={{textAlign:"center",flexShrink:0}}>
-                      <div style={{fontSize:11,fontWeight:900,color:pred.confColor}}>{pred.winner}</div>
-                      <div className="mn" style={{fontSize:9,color:pred.confColor}}>{pred.winPct}%</div>
+                      <div style={{fontSize:16,fontWeight:900,color:pred.confColor}}>{pred.winner}</div>
+                      <div className="mn" style={{fontSize:14,color:pred.confColor}}>{pred.winPct}%</div>
                     </div>
                   </div>
                 );
               })}
-              <button onClick={()=>setTrkRound(trkRound+1)} style={{width:"100%",marginTop:10,padding:"8px",borderRadius:6,fontSize:10,fontWeight:700,background:"rgba(139,92,246,0.12)",color:"#7c8db5",border:"1px solid rgba(139,92,246,0.25)",cursor:"pointer",fontFamily:"'DM Sans'"}}>
+              <button onClick={()=>setTrkRound(trkRound+1)} style={{width:"100%",marginTop:10,padding:"8px",borderRadius:8,fontSize:13,fontWeight:700,background:"rgba(139,92,246,0.12)",color:"#7c8db5",border:"1px solid rgba(139,92,246,0.25)",cursor:"pointer",fontFamily:"'DM Sans'"}}>
                 Go to {nextLabel} →
               </button>
             </div>
@@ -1231,17 +1691,17 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
         })()}
 
         {/* Results management */}
-        <div className="gl" style={{padding:12,marginTop:12}}>
+        <div className="gl" style={{padding:16,marginTop:12}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
-              <div style={{fontSize:9,fontWeight:700,color:"var(--m)",letterSpacing:1}}>RESULTS LOGGED</div>
-              <div className="mn" style={{fontSize:14,fontWeight:800}}>{Object.keys(results).length} / 63</div>
+              <div style={{fontSize:14,fontWeight:700,color:"var(--m)",letterSpacing:1}}>RESULTS LOGGED</div>
+              <div className="mn" style={{fontSize:15,fontWeight:800}}>{Object.keys(results).length} / 63</div>
             </div>
             <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>{if(confirm("Clear all results? This cannot be undone."))saveResults({});}} style={{padding:"6px 12px",borderRadius:6,fontSize:9,fontWeight:700,background:"rgba(239,68,68,0.08)",color:"var(--red)",border:"1px solid rgba(239,68,68,0.2)",cursor:"pointer",fontFamily:"'DM Sans'"}}>Reset All</button>
+              <button onClick={()=>{if(confirm("Clear all results? This cannot be undone."))saveResults({});}} style={{padding:"6px 12px",borderRadius:8,fontSize:14,fontWeight:700,background:"rgba(239,68,68,0.08)",color:"var(--red)",border:"1px solid rgba(239,68,68,0.2)",cursor:"pointer",fontFamily:"'DM Sans'"}}>Reset All</button>
             </div>
           </div>
-          <div style={{fontSize:9,color:"var(--m)",marginTop:6,lineHeight:1.5}}>
+          <div style={{fontSize:14,color:"var(--m)",marginTop:6,lineHeight:1.5}}>
             <b>Scoring:</b> R64=10pts · R32=20pts · S16=40pts · E8=80pts · F4=160pts · Final=320pts
           </div>
         </div>
