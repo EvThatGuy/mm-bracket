@@ -1870,3 +1870,4 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
     </div>
   );
 }
+ 
