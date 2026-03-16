@@ -1138,7 +1138,6 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               }} style={{width:"100%",padding:"12px",borderRadius:8,fontSize:14,fontFamily:"'DM Sans'",cursor:"pointer",letterSpacing:0.2}}>
                 Generate {name} Bracket
               </button>
-              </button>
             </div>
           ))}
         </div>
