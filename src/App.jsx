@@ -486,6 +486,7 @@ export default function App(){
   const [parlayLegs,setParlayLegs]=useState(8);
   const [parlayType,setParlayType]=useState("auto");
   const [parlayBetTypes,setParlayBetTypes]=useState({ml:true,spread:false,total:false});
+  const [parlayBook,setParlayBook]=useState("ALL");
   const [oddsHistory,setOddsHistory]=useState([]);
   const [parlays,setParlays]=useState(null);
   const [parlayLoading,setParlayLoading]=useState(false);
@@ -1057,9 +1058,9 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
       const gameData=odds[teamName];
       if(!gameData)return null;
       let bestOdds=null;let bestBook=null;
-      Object.entries(gameData.books).forEach(([bookName,bk])=>{
+      const booksToCheck=parlayBook==="ALL"?Object.entries(gameData.books):Object.entries(gameData.books).filter(([name])=>name===parlayBook);
+      booksToCheck.forEach(([bookName,bk])=>{
         const h2h=bk.h2h||{};
-        // Find this team's line across book names (fuzzy match)
         Object.entries(h2h).forEach(([name,price])=>{
           const nl=name.toLowerCase(),tl=teamName.toLowerCase();
           if(nl.includes(tl)||tl.includes(nl)||nl.includes(tl.split(" ")[0])){
@@ -1098,7 +1099,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
         if(odds){
           const gd=odds[winner]||odds[loser];
           if(gd){
-            const fb=Object.keys(gd.books)[0];
+            const fb=parlayBook==="ALL"?Object.keys(gd.books)[0]:gd.books[parlayBook]?parlayBook:Object.keys(gd.books)[0];
             if(fb){
               const bk=gd.books[fb];
               const sp=bk?.spreads||{};const tot=bk?.totals||{};
@@ -1291,7 +1292,7 @@ EXACTLY ${parlayLegs} legs per parlay.`;
     
     setParlays(localParlays);
     setParlayLoading(false);
-  },[parlayLegs,parlayType,boosts,liveOdds]);
+  },[parlayLegs,parlayType,parlayBetTypes,parlayBook,boosts,liveOdds]);
   const pick=useCallback((key,team)=>{
     const nb=[...brackets];const p={...nb[bIdx].picks,[key]:team};
     // Clear downstream
@@ -2253,6 +2254,23 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                 <div style={{fontSize:12,fontWeight:700,color:parlayBetTypes[bt.id]?"var(--acc)":"var(--m)"}}>{bt.label}</div>
               </div>
             ))}
+          </div>
+
+          {/* Sportsbook Filter */}
+          <div style={{fontSize:12,fontWeight:700,color:"var(--m)",marginBottom:8,letterSpacing:0.3}}>SPORTSBOOK</div>
+          <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+            {(()=>{
+              // Collect all available book names from live odds
+              const books=new Set(["ALL"]);
+              if(liveOdds){Object.values(liveOdds).forEach(gd=>{Object.keys(gd.books||{}).forEach(b=>books.add(b));});}
+              return[...books].slice(0,8).map(bk=>(
+                <div key={bk} onClick={()=>setParlayBook(bk)} style={{padding:"8px 12px",borderRadius:8,cursor:"pointer",textAlign:"center",
+                  background:parlayBook===bk?"rgba(20,147,255,0.08)":"var(--s2)",
+                  border:parlayBook===bk?"1px solid var(--acc)":"1px solid var(--b)",transition:"all 0.15s",flex:"0 0 auto"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:parlayBook===bk?"var(--acc)":"var(--m)",whiteSpace:"nowrap"}}>{bk==="ALL"?"Best Odds":bk}</div>
+                </div>
+              ));
+            })()}
           </div>
 
           {/* Build button */}
