@@ -449,6 +449,65 @@ button:disabled{opacity:0.5;cursor:not-allowed!important}
 `;
 
 export default function App(){
+  // ═══ AUTH GATE ═══
+  const [authed,setAuthed]=useState(()=>{
+    try{const s=localStorage.getItem("mm26-auth");return s==="true";}catch(e){return false;}
+  });
+  const [authLoading,setAuthLoading]=useState(false);
+  const [authError,setAuthError]=useState("");
+  const [authPw,setAuthPw]=useState("");
+
+  const doLogin=async()=>{
+    if(!authPw.trim())return;
+    setAuthLoading(true);setAuthError("");
+    try{
+      const res=await fetch("/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:authPw})});
+      const data=await res.json();
+      if(data.success){
+        setAuthed(true);
+        try{localStorage.setItem("mm26-auth","true");}catch(e){}
+      }else{
+        setAuthError("Wrong password");
+      }
+    }catch(e){
+      setAuthError("Connection error — try again");
+    }
+    setAuthLoading(false);
+  };
+
+  if(!authed){
+    return(
+      <div style={{background:"#0e1118",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif",padding:20}}>
+        <style>{CSS}</style>
+        <div style={{width:"100%",maxWidth:380,textAlign:"center"}}>
+          <div style={{fontSize:28,fontWeight:800,color:"#fff",letterSpacing:-0.5,marginBottom:4}}>March Madness</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,0.4)",marginBottom:32}}>2026 NCAA Tournament Bracket Intelligence</div>
+          <div style={{background:"#171b26",border:"1px solid rgba(255,255,255,0.06)",borderRadius:12,padding:28}}>
+            <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:16}}>Enter Password</div>
+            <input
+              type="password"
+              value={authPw}
+              onChange={e=>setAuthPw(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter")doLogin();}}
+              placeholder="Password"
+              autoFocus
+              style={{width:"100%",padding:"14px 16px",borderRadius:8,background:"#1d2230",border:"1px solid rgba(255,255,255,0.1)",color:"#fff",fontSize:15,fontFamily:"'DM Sans',sans-serif",outline:"none",boxSizing:"border-box",marginBottom:14}}
+            />
+            <button
+              onClick={doLogin}
+              disabled={authLoading}
+              style={{width:"100%",padding:"14px",borderRadius:8,fontSize:15,fontWeight:700,background:"#1493ff",color:"#fff",border:"none",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",opacity:authLoading?0.6:1,transition:"all 0.15s"}}
+            >
+              {authLoading?"Checking...":"Log In"}
+            </button>
+            {authError&&<div style={{color:"#e5453d",fontSize:13,marginTop:12}}>{authError}</div>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══ MAIN APP (authenticated) ═══
   const ALLOWED_BOOKS=["FanDuel","DraftKings"];
   const isAllowedBook=(name)=>ALLOWED_BOOKS.some(b=>name.toLowerCase().includes(b.toLowerCase()));
   
@@ -1445,9 +1504,14 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               <div style={{fontSize:24,fontWeight:800,letterSpacing:-0.4,color:"#fff"}}>March Madness</div>
               <div style={{fontSize:13,color:"var(--m)",marginTop:1,fontWeight:500}}>2026 NCAA Tournament Bracket Intelligence</div>
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",borderRadius:8,background:"rgba(47,189,96,0.06)",border:"1px solid rgba(47,189,96,0.15)",animation:"liveGlow 1.8s ease-in-out infinite"}}>
-              <div style={{width:9,height:9,borderRadius:"50%",background:"var(--green)",boxShadow:"0 0 6px var(--green), 0 0 12px rgba(47,189,96,0.4)",animation:"liveDot 1.8s ease-in-out infinite"}}/>
-              <span style={{fontSize:12,color:"var(--green)",fontWeight:700,letterSpacing:1,animation:"liveText 1.8s ease-in-out infinite"}}>LIVE</span>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",borderRadius:8,background:"rgba(47,189,96,0.06)",border:"1px solid rgba(47,189,96,0.15)",animation:"liveGlow 1.8s ease-in-out infinite"}}>
+                <div style={{width:9,height:9,borderRadius:"50%",background:"var(--green)",boxShadow:"0 0 6px var(--green), 0 0 12px rgba(47,189,96,0.4)",animation:"liveDot 1.8s ease-in-out infinite"}}/>
+                <span style={{fontSize:12,color:"var(--green)",fontWeight:700,letterSpacing:1,animation:"liveText 1.8s ease-in-out infinite"}}>LIVE</span>
+              </div>
+              <div onClick={()=>{try{localStorage.removeItem("mm26-auth");}catch(e){}setAuthed(false);}} style={{padding:"6px 10px",borderRadius:6,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.06)"}}>
+                <span style={{fontSize:10,color:"var(--m)",fontWeight:600}}>Logout</span>
+              </div>
             </div>
           </div>
         </div>
