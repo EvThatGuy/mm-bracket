@@ -377,10 +377,14 @@ function getBracketScore(picks){
   if(!picks||Object.keys(picks).length<10)return null;
   let chalk=0,total=0,upsets=0;
   Object.entries(picks).forEach(([key,val])=>{
-    const t=T[val];if(!t)return;total++;
+    const t=T[val];if(!t)return;
+    // Skip F4 and CHAMP keys for chalk/upset calculation
+    if(key.startsWith("F4")||key==="CHAMP")return;
+    total++;
     const parts=key.split("-");const round=parseInt(parts[1]);
     if(round===0){
       const rk=parts[0];const pi=parseInt(parts[2]);
+      if(!MO[rk]||!MO[rk][pi])return;
       const [a,b]=MO[rk][pi];
       const fav=T[a].s<T[b].s?a:b;
       if(val===fav)chalk++;else upsets++;
@@ -397,8 +401,8 @@ const CSS=`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,op
   --bg:#0e1118;--s:#171b26;--s2:#1d2230;--s3:#252a3a;--s4:#2c3348;
   --b:rgba(255,255,255,0.06);--b2:rgba(255,255,255,0.10);
   --t:#ffffff;--t2:#c5cdd8;--m:rgba(255,255,255,0.45);--d:rgba(255,255,255,0.18);
-  --acc:#1493ff;--acc2:#0f7ee0;--green:var(--green);--green2:#25a050;
-  --red:var(--red);--orange:var(--orange);--yellow:#ffd23f;
+  --acc:#1493ff;--acc2:#0f7ee0;--green:#2fbd60;--green2:#25a050;
+  --red:#e5453d;--orange:#f5a623;--yellow:#ffd23f;
   --r:10px;--mw:840px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -423,6 +427,9 @@ button{transition:all 0.15s ease!important}
 button:hover:not(:disabled){filter:brightness(1.15);transform:translateY(-1px)}
 button:active:not(:disabled){transform:translateY(0px);filter:brightness(0.95)}
 button:disabled{opacity:0.5;cursor:not-allowed!important}
+@keyframes toastIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes toastOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(20px)}}
+@keyframes notifPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
 .btn-primary{background:var(--acc)!important;color:#fff!important;border:none!important;font-weight:700!important;box-shadow:0 2px 8px rgba(20,147,255,0.2)}
 .btn-primary:hover{box-shadow:0 4px 16px rgba(20,147,255,0.35)}
 .btn-green{background:var(--green)!important;color:#000!important;border:none!important;font-weight:700!important;box-shadow:0 2px 8px rgba(47,189,96,0.2)}
@@ -460,6 +467,8 @@ export default function App(){
   const [oddsShifts,setOddsShifts]=useState([]);
   const [pathAlerts,setPathAlerts]=useState([]);
   const [modal,setModal]=useState(null);
+  const [toast,setToast]=useState(null);
+  const [bracketNotif,setBracketNotif]=useState(false);
 
   useEffect(()=>{
     (()=>{try{const v=localStorage.getItem("mm26-br");if(v)setBrackets(JSON.parse(v));}catch(e){}})();
@@ -716,6 +725,11 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
   },[results,saveResults]);
 
   const save=useCallback(async(br)=>{setBrackets(br);try{localStorage.setItem("mm26-br",JSON.stringify(br));}catch(e){}},[]);
+
+  const showToast=useCallback((msg,actionLabel,action)=>{
+    setToast({msg,actionLabel,action,id:Date.now()});
+    setTimeout(()=>setToast(null),5000);
+  },[]);
   const pick=useCallback((key,team)=>{
     const nb=[...brackets];const p={...nb[bIdx].picks,[key]:team};
     // Clear downstream
@@ -793,13 +807,19 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
       <div style={{background:"var(--bg)",borderBottom:"2px solid var(--b)",position:"sticky",top:0,zIndex:50}}>
         <div className="wrap" style={{display:"flex",flexWrap:"wrap",gap:0,padding:"0 12px"}}>
           {TABS.map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)} style={{
+            <button key={t.id} onClick={()=>{setTab(t.id);if(t.id==="bracket")setBracketNotif(false);}} style={{
               flex:"1 0 auto",padding:"10px 10px",fontSize:11,fontWeight:700,letterSpacing:0.4,
               background:"transparent",color:tab===t.id?"#fff":"var(--m)",
               borderBottom:tab===t.id?"2px solid var(--acc)":"2px solid transparent",
               border:"none",borderTop:"none",borderLeft:"none",borderRight:"none",
-              cursor:"pointer",fontFamily:"'DM Sans'",whiteSpace:"nowrap",transition:"color 0.12s"
-            }}>{t.l}</button>
+              cursor:"pointer",fontFamily:"'DM Sans'",whiteSpace:"nowrap",transition:"color 0.12s",
+              position:"relative"
+            }}>
+              {t.l}
+              {t.id==="bracket"&&bracketNotif&&(
+                <span style={{position:"absolute",top:6,right:2,width:8,height:8,borderRadius:"50%",background:"var(--acc)",boxShadow:"0 0 6px var(--acc)",animation:"notifPulse 1s ease infinite"}}/>
+              )}
+            </button>
           ))}
         </div>
       </div>
@@ -1135,6 +1155,8 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                 const targetIdx=mode==="chalk"?0:mode==="balanced"?1:2;
                 nb[targetIdx]={...nb[targetIdx],picks:newPicks};
                 save(nb);
+                setBracketNotif(true);
+                showToast(`${name} bracket generated — ${Object.keys(newPicks).length} picks`,"View Bracket",()=>{setTab("bracket");setBIdx(targetIdx);setBracketNotif(false);});
               }} style={{width:"100%",padding:"12px",borderRadius:8,fontSize:14,fontFamily:"'DM Sans'",cursor:"pointer",letterSpacing:0.2}}>
                 Generate {name} Bracket
               </button>
@@ -1153,6 +1175,8 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               {name:"Upset Heavy",picks:generateBracket("chaos")},
             ];
             save(nb);
+            setBracketNotif(true);
+            showToast("All 3 brackets generated — Chalk, Balanced, and Upset Heavy ready","View Brackets",()=>{setTab("bracket");setBracketNotif(false);});
           }} style={{padding:"14px 40px",borderRadius:8,fontSize:14,fontFamily:"'DM Sans'",cursor:"pointer",letterSpacing:0.2}}>
             Generate All 3
           </button>
@@ -1816,6 +1840,22 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
       </div>
 
+      {/* ═══ TOAST NOTIFICATION ═══ */}
+      {toast&&(
+        <div key={toast.id} style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:900,animation:"toastIn 0.3s ease",maxWidth:480,width:"calc(100% - 40px)"}}>
+          <div style={{background:"var(--s3)",border:"1px solid var(--b2)",borderRadius:10,padding:"14px 18px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 8px 30px rgba(0,0,0,0.5)"}}>
+            <div style={{width:4,height:24,borderRadius:2,background:"var(--acc)",flexShrink:0}}/>
+            <div style={{flex:1,fontSize:13,color:"#fff",fontWeight:500,lineHeight:1.4}}>{toast.msg}</div>
+            {toast.actionLabel&&(
+              <button className="btn-primary" onClick={()=>{toast.action?.();setToast(null);}} style={{padding:"8px 16px",borderRadius:6,fontSize:12,fontFamily:"'DM Sans'",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>
+                {toast.actionLabel}
+              </button>
+            )}
+            <div onClick={()=>setToast(null)} style={{cursor:"pointer",color:"var(--m)",fontSize:16,padding:"0 4px",flexShrink:0,lineHeight:1}}>×</div>
+          </div>
+        </div>
+      )}
+
       {/* ═══ MODAL OVERLAY ═══ */}
       {modal&&(
         <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}} onClick={()=>setModal(null)}>
@@ -1870,4 +1910,3 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
     </div>
   );
 }
- 
