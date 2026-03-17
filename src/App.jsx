@@ -46,7 +46,6 @@ const T={
 "Queens NC":{s:15,r:"W",rec:"21-13",c:"ASUN",off:42,def:40,exp:52,mom:60,sos:18,reb:40,to:52,three:58,ft:66,bench:48,tempo:68,style:"perimeter",defStyle:"man",clutch:48,starPIR:25,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.1,note:"First-ever tourney appearance"},
 
 "Florida":{s:1,r:"S",rec:"26-7",c:"SEC",off:88,def:90,exp:85,mom:82,sos:88,reb:96,to:78,three:62,ft:78,bench:82,tempo:70,style:"inside",defStyle:"man",clutch:85,starPIR:80,star:"",starLine:"",inj:"",coach:"Todd Golden",vegasOdds:"+600",vegasImpl:14.3,note:"DEFENDING CHAMPS. Best rebounding in nation. No perimeter star like Clayton Jr."},
-"Lehigh":{s:16,r:"S",rec:"18-16",c:"Patriot",off:35,def:32,exp:50,mom:55,sos:10,reb:35,to:50,three:55,ft:65,bench:45,tempo:68,style:"perimeter",defStyle:"zone",clutch:40,starPIR:18,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.0,note:"18-16 Patriot auto-bid"},
 "Clemson":{s:8,r:"S",rec:"24-10",c:"ACC",off:68,def:70,exp:74,mom:68,sos:78,reb:70,to:68,three:66,ft:74,bench:70,tempo:66,style:"balanced",defStyle:"man",clutch:64,starPIR:52,star:"",starLine:"",inj:"",coach:"Brad Brownell",vegasOdds:"+8000",vegasImpl:1.2,note:"ACC vet squad"},
 "Iowa":{s:9,r:"S",rec:"21-12",c:"Big Ten",off:72,def:64,exp:70,mom:60,sos:82,reb:64,to:62,three:74,ft:78,bench:68,tempo:76,style:"perimeter",defStyle:"man",clutch:60,starPIR:55,star:"",starLine:"",inj:"",coach:"Fran McCaffery",vegasOdds:"+8000",vegasImpl:1.2,note:"High tempo, Big Ten tested"},
 "Vanderbilt":{s:5,r:"S",rec:"26-8",c:"SEC",off:78,def:72,exp:68,mom:82,sos:84,reb:68,to:66,three:74,ft:72,bench:70,tempo:76,style:"fastbreak",defStyle:"press",clutch:78,starPIR:88,star:"Tyler Tanner",starLine:"19.2p/5.3a/2.4s/37.3% 3P",inj:"",coach:"Mark Byington",vegasOdds:"+3000",vegasImpl:3.2,note:"MASSIVELY under-seeded as 5. Tanner is breakout star of the year."},
@@ -78,15 +77,32 @@ const T={
 "Santa Clara":{s:10,r:"MW",rec:"26-8",c:"WCC",off:72,def:66,exp:72,mom:76,sos:50,reb:64,to:70,three:74,ft:76,bench:70,tempo:70,style:"perimeter",defStyle:"man",clutch:70,starPIR:58,star:"",starLine:"",inj:"",coach:"Herb Sendek",vegasOdds:"+10000",vegasImpl:1.0,note:"23rd offense, 9 deep, real UK threat"},
 "Iowa State":{s:2,r:"MW",rec:"27-7",c:"Big 12",off:84,def:90,exp:82,mom:78,sos:86,reb:80,to:82,three:68,ft:78,bench:80,tempo:62,style:"inside",defStyle:"press",clutch:82,starPIR:82,star:"Joshua Jefferson",starLine:"16.9p/7.6r/4.9a - highest big-man ast%",inj:"",coach:"T.J. Otzelberger",vegasOdds:"+1500",vegasImpl:6.3,note:"4th-best D nationally. Jefferson is a unicorn stat-stuffer."},
 "Tenn. State":{s:15,r:"MW",rec:"23-9",c:"OVC",off:44,def:40,exp:54,mom:65,sos:16,reb:42,to:54,three:58,ft:68,bench:48,tempo:74,style:"fastbreak",defStyle:"man",clutch:50,starPIR:25,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.1,note:"First appearance since 1994"},
+"Prairie View":{s:16,r:"S",rec:"19-15",c:"SWAC",off:42,def:38,exp:52,mom:60,sos:12,reb:45,to:50,three:52,ft:65,bench:45,tempo:72,style:"fastbreak",defStyle:"man",clutch:45,starPIR:20,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"First Four: vs Lehigh for 16-seed in South"},
+"Lehigh":{s:16,r:"S",rec:"22-12",c:"Patriot",off:52,def:48,exp:62,mom:68,sos:22,reb:50,to:58,three:62,ft:72,bench:52,tempo:65,style:"balanced",defStyle:"zone",clutch:58,starPIR:30,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"First Four: slight favorite vs Prairie View"},
+"Texas":{s:11,r:"W",rec:"20-13",c:"SEC",off:65,def:62,exp:70,mom:65,sos:72,reb:60,to:58,three:60,ft:70,bench:62,tempo:68,style:"balanced",defStyle:"man",clutch:62,starPIR:55,star:"Dailyn Swain",starLine:"15ppg",inj:"",coach:"Sean Miller",vegasOdds:"+25000",vegasImpl:0.4,note:"First Four: vs NC State, sneaky size and talent"},
+"SMU":{s:11,r:"MW",rec:"22-11",c:"ACC",off:64,def:60,exp:68,mom:62,sos:68,reb:58,to:60,three:62,ft:68,bench:60,tempo:70,style:"balanced",defStyle:"man",clutch:60,starPIR:50,star:"",starLine:"",inj:"",coach:"",vegasOdds:"+30000",vegasImpl:0.3,note:"First Four: vs Miami OH, better talent getting healthy"},
+"UMBC":{s:16,r:"MW",rec:"21-11",c:"AE",off:48,def:45,exp:58,mom:62,sos:18,reb:48,to:55,three:58,ft:70,bench:50,tempo:68,style:"balanced",defStyle:"man",clutch:52,starPIR:22,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"First Four: vs Howard, famous 16-seed upset team"},
+"TBD":{s:16,r:"",rec:"",c:"First Four",off:50,def:50,exp:50,mom:50,sos:20,reb:50,to:50,three:50,ft:50,bench:50,tempo:65,style:"balanced",defStyle:"man",clutch:50,starPIR:20,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"Pending First Four result"},
 };
 
 const RG={E:"East",W:"West",S:"South",MW:"Midwest"};
 const RC={E:"#1493ff",W:"#2fbd60",S:"#e5453d",MW:"#f5a623"};
+/* First Four games — winners advance to R64 */
+const FIRST_FOUR=[
+  {game:"FF1",a:"Prairie View",b:"Lehigh",advancesTo:{region:"S",game:0},status:"pending",winner:null},
+  {game:"FF2",a:"Texas",b:"NC State",advancesTo:{region:"W",game:4},status:"pending",winner:null},
+  {game:"FF3",a:"UMBC",b:"Howard",advancesTo:{region:"MW",game:0},status:"pending",winner:null},
+  {game:"FF4",a:"Miami OH",b:"SMU",advancesTo:{region:"MW",game:4},status:"pending",winner:null},
+];
+// R64 slots that depend on First Four results (team TBD until FF winner is known)
+const FF_PENDING_SLOTS={"S-0-0":["Prairie View","Lehigh"],"W-0-4":["Texas","NC State"],"MW-0-0":["UMBC","Howard"],"MW-0-4":["Miami OH","SMU"]};
+const isFFPending=(rk,gi)=>!!FF_PENDING_SLOTS[`${rk}-0-${gi}`];
+
 const MO={
 E:[["Duke","Siena"],["Ohio State","TCU"],["St. John's","N. Iowa"],["Kansas","Cal Baptist"],["Louisville","S. Florida"],["Michigan St","N. Dakota St"],["UCLA","UCF"],["UConn","Furman"]],
-W:[["Arizona","LIU"],["Villanova","Utah State"],["Wisconsin","High Point"],["Arkansas","Hawaii"],["BYU","NC State"],["Gonzaga","Kennesaw St"],["Miami FL","Missouri"],["Purdue","Queens NC"]],
-S:[["Florida","Lehigh"],["Clemson","Iowa"],["Vanderbilt","McNeese"],["Nebraska","Troy"],["UNC","VCU"],["Illinois","Penn"],["Saint Mary's","Texas A&M"],["Houston","Idaho"]],
-MW:[["Michigan","Howard"],["Georgia","Saint Louis"],["Texas Tech","Akron"],["Alabama","Hofstra"],["Tennessee","Miami OH"],["Virginia","Wright St"],["Kentucky","Santa Clara"],["Iowa State","Tenn. State"]],
+W:[["Arizona","LIU"],["Villanova","Utah State"],["Wisconsin","High Point"],["Arkansas","Hawaii"],["BYU","TBD"],["Gonzaga","Kennesaw St"],["Miami FL","Missouri"],["Purdue","Queens NC"]],
+S:[["Florida","TBD"],["Clemson","Iowa"],["Vanderbilt","McNeese"],["Nebraska","Troy"],["UNC","VCU"],["Illinois","Penn"],["Saint Mary's","Texas A&M"],["Houston","Idaho"]],
+MW:[["Michigan","TBD"],["Georgia","Saint Louis"],["Texas Tech","Akron"],["Alabama","Hofstra"],["Tennessee","TBD"],["Virginia","Wright St"],["Kentucky","Santa Clara"],["Iowa State","Tenn. State"]],
 };
 
 /* Conference Power Index — historical tourney performance */
@@ -126,7 +142,10 @@ function runMC(n=5000,boosts=null){
   for(let i=0;i<n;i++){
     const f4=[];
     Object.entries(MO).forEach(([rk,ms])=>{
-      let r1=ms.map(([a,b])=>Math.random()<getWP(a,b,boosts)?a:b);
+      let r1=ms.map(([a,b])=>{
+        if(a==="TBD"||b==="TBD")return a==="TBD"?b:a; // Auto-advance known team past TBD
+        return Math.random()<getWP(a,b,boosts)?a:b;
+      });
       let r2=[];for(let j=0;j<r1.length;j+=2)r2.push(Math.random()<getWP(r1[j],r1[j+1],boosts)?r1[j]:r1[j+1]);
       r2.forEach(t=>s16c[t]++);
       let s16=[];for(let j=0;j<r2.length;j+=2)s16.push(Math.random()<getWP(r2[j],r2[j+1],boosts)?r2[j]:r2[j+1]);
@@ -251,6 +270,7 @@ function generateBracket(mode="chalk"){
   Object.entries(MO).forEach(([rk,matchups])=>{
     // R64
     const r1=matchups.map(([a,b],i)=>{
+      if(a==="TBD"||b==="TBD"){const real=a==="TBD"?b:a;picks[`${rk}-0-${i}`]=real;return real;}
       const wp=getWP(a,b);const fav=wp>=0.5?a:b;const dog=wp>=0.5?b:a;
       const upProb=1-Math.max(wp,1-wp);
       let pick=fav;
@@ -323,6 +343,7 @@ function generateBracket(mode="chalk"){
 
 /* ─── GAME PREDICTION ENGINE ─── */
 function getGamePrediction(a,b){
+  if(a==="TBD"||b==="TBD")return null;
   const ta=T[a],tb=T[b];if(!ta||!tb)return null;
   const wp=getWP(a,b);
   const winner=wp>=0.5?a:b;const loser=wp>=0.5?b:a;
@@ -623,6 +644,7 @@ export default function App(){
     }).join("\n");
     
     const topUpsets=Object.entries(MO).flatMap(([rk,ms])=>ms.map(([a,b])=>{
+      if(a==="TBD"||b==="TBD")return null;
       const p=getWP(a,b);const up=1-p;
       if(up<0.28||T[b].s<=8)return null;
       return{fav:a,dog:b,pct:Math.round(up*100),reg:RG[rk]};
@@ -1011,10 +1033,16 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
         ctx.fillText(badge,w-116,ly+17);
       }
       // Odds/confidence
-      const confColor=leg.winPct>=80?"#2fbd60":leg.winPct>=65?"#1493ff":leg.winPct>=50?"#f5a623":"#e5453d";
+      // Odds + model confidence
+      const mConf=leg.modelWinPct||leg.winPct||50;
+      const confColor=mConf>=80?"#2fbd60":mConf>=65?"#1493ff":mConf>=50?"#f5a623":"#e5453d";
       ctx.fillStyle=confColor;ctx.font="bold 14px 'IBM Plex Mono',monospace";
-      const odds=leg.liveOdds!==null?`${leg.liveOdds>0?"+":""}${leg.liveOdds}`:`${leg.winPct}%`;
-      ctx.fillText(odds,w-70,ly+20);
+      const odds=leg.liveOdds!==null?`${leg.liveOdds>0?"+":""}${leg.liveOdds}`:"—";
+      ctx.fillText(odds,w-70,ly+16);
+      if(leg.modelWinPct){
+        ctx.fillStyle="rgba(255,255,255,0.35)";ctx.font="9px 'DM Sans',sans-serif";
+        ctx.fillText(`${leg.modelWinPct}% conf`,w-70,ly+28);
+      }
     });
     
     // Footer
@@ -1109,279 +1137,202 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
     const key=getSeedMatchup(seedW,seedL);
     const histRate=SEED_UPSET_RATE[key];
     if(!histRate)return modelProb;
-    // If model says favorite wins, blend with historical rate
     const isFav=seedW<seedL;
     const histProb=isFav?(1-histRate):histRate;
-    return modelProb*0.65+histProb*0.35; // 65% model, 35% history
+    return modelProb*0.65+histProb*0.35;
   };
 
-  // Build parlays using prediction engine + live odds + AI
+  // Build parlays — API-FIRST. Only real sportsbook data, no fake lines.
   const buildParlays=useCallback(async()=>{
     setParlayLoading(true);setParlays(null);
     
-    // Auto-fetch live odds if we don't have them
-    let odds=liveOdds;
-    if(!odds){
-      try{
-        const res=await fetch("/api/odds?sport=basketball_ncaab&markets=h2h,spreads,totals&regions=us");
-        const data=await res.json();
-        if(data.odds&&Array.isArray(data.odds)){
-          const parsed={};
-          data.odds.forEach(game=>{
-            const bookmakers=(game.bookmakers||[]).filter(bk=>isAllowedBook(bk.title));
-            const gameData={home:game.home_team,away:game.away_team,commence:game.commence_time,books:{}};
-            bookmakers.forEach(bk=>{
-              const h2h=bk.markets?.find(m=>m.key==="h2h");
-              const spreads=bk.markets?.find(m=>m.key==="spreads");
-              gameData.books[bk.title]={
-                h2h:h2h?.outcomes?.reduce((a,o)=>({...a,[o.name]:o.price}),{})||{},
-                spreads:spreads?.outcomes?.reduce((a,o)=>({...a,[o.name]:{price:o.price,point:o.point}}),{})||{},
-              };
-            });
-            const matchTeam=(name)=>resolveAPIName(name);
-            const hm=matchTeam(game.home_team);const am=matchTeam(game.away_team);
-            // Only store if both teams match AND they play each other in our bracket
-            if(hm&&am){
-              let isReal=false;
-              Object.values(MO).forEach(ms=>{ms.forEach(([a,b])=>{if((a===hm&&b===am)||(a===am&&b===hm))isReal=true;});});
-              if(isReal){parsed[hm]={...gameData,opponent:am};parsed[am]={...gameData,opponent:hm};}
-            }
-          });
-          odds=parsed;setLiveOdds(parsed);
-          setOddsUsage(data.usage);
-          try{localStorage.setItem("mm26-odds",JSON.stringify({data:parsed,usage:data.usage,ts:Date.now()}));}catch(e){}
-        }
-      }catch(e){/* proceed without live odds */}
+    // Step 1: ALWAYS fetch fresh from the API — source of truth
+    let rawGames=[];
+    try{
+      const res=await fetch("/api/odds?sport=basketball_ncaab&markets=h2h,spreads,totals&regions=us");
+      const data=await res.json();
+      if(data.odds&&Array.isArray(data.odds)){rawGames=data.odds;if(data.usage)setOddsUsage(data.usage);}
+    }catch(e){
+      setParlayLoading(false);
+      showToast("Could not reach odds API. Check ODDS_API_KEY in Vercel.");
+      return;
     }
-
-    // Helper: convert American odds to implied probability
+    if(rawGames.length===0){setParlayLoading(false);showToast("No games from API. Lines may not be posted yet.");return;}
+    
+    // Step 2: Parse raw API games — keep ALL data exactly as returned
     const americanToProb=(am)=>{if(!am||am===0)return null;return am>0?100/(am+100):Math.abs(am)/(Math.abs(am)+100);};
-    // Helper: find best moneyline for a team — verifies opponent matches
-    const findLiveLine=(teamName,expectedOpponent)=>{
-      if(!odds)return null;
-      const gameData=odds[teamName];
-      if(!gameData)return null;
-      if(expectedOpponent&&gameData.opponent&&gameData.opponent!==expectedOpponent)return null;
-      let bestOdds=null;let bestBook=null;
-      const booksToCheck=parlayBook==="ALL"?Object.entries(gameData.books):Object.entries(gameData.books).filter(([name])=>name===parlayBook);
-      booksToCheck.forEach(([bookName,bk])=>{
-        const h2h=bk.h2h||{};
-        Object.entries(h2h).forEach(([name,price])=>{
-          // Use exact map: resolve API name to bracket name and compare
-          const resolved=resolveAPIName(name);
-          if(resolved===teamName){
-            if(bestOdds===null||price>bestOdds){bestOdds=price;bestBook=bookName;}
+    const parsedGames=rawGames.map(game=>{
+      const books=(game.bookmakers||[]).filter(bk=>isAllowedBook(bk.title));
+      if(books.length===0)return null;
+      const book=parlayBook==="ALL"?books[0]:books.find(b=>b.title===parlayBook)||books[0];
+      if(!book)return null;
+      const h2h=book.markets?.find(m=>m.key==="h2h");
+      const spreads=book.markets?.find(m=>m.key==="spreads");
+      const totals=book.markets?.find(m=>m.key==="totals");
+      const homeTeamAPI=game.home_team;const awayTeamAPI=game.away_team;
+      const homeML=h2h?.outcomes?.find(o=>o.name===homeTeamAPI)?.price||null;
+      const awayML=h2h?.outcomes?.find(o=>o.name===awayTeamAPI)?.price||null;
+      const homeSpread=spreads?.outcomes?.find(o=>o.name===homeTeamAPI);
+      const awaySpread=spreads?.outcomes?.find(o=>o.name===awayTeamAPI);
+      const over=totals?.outcomes?.find(o=>o.name==="Over");
+      const under=totals?.outcomes?.find(o=>o.name==="Under");
+      // Model overlay (optional)
+      const homeBracket=resolveAPIName(homeTeamAPI);const awayBracket=resolveAPIName(awayTeamAPI);
+      let modelConf=null,modelEdge=0,modelTags=[];
+      if(homeBracket&&awayBracket&&T[homeBracket]&&T[awayBracket]){
+        const wp=getWP(homeBracket,awayBracket,boosts);const fav=wp>=0.5?homeBracket:awayBracket;
+        const calConf=calibrate(Math.max(wp,1-wp),T[fav].s,T[fav===homeBracket?awayBracket:homeBracket].s);
+        const tFav=T[fav],tDog=T[fav===homeBracket?awayBracket:homeBracket];
+        modelConf=Math.min(0.97,Math.max(0.03,calConf+(tDog.inj?0.04:0)+(tFav.mom-tDog.mom)/200+(tFav.clutch-tDog.clutch)/200));
+        const favML=fav===homeBracket?homeML:awayML;
+        const vegasImpl=favML?americanToProb(favML):null;
+        modelEdge=vegasImpl?(modelConf-vegasImpl):0;
+        if(modelEdge>0.05)modelTags.push(`+${Math.round(modelEdge*100)}% EV`);
+        if(tDog.inj)modelTags.push("INJURY EDGE");
+        if(tFav.mom>=80)modelTags.push("HOT");
+        if(tFav.clutch>=80)modelTags.push("CLUTCH");
+      }
+      return{id:game.id,homeTeam:homeTeamAPI,awayTeam:awayTeamAPI,homeBracket,awayBracket,bookName:book.title,commence:game.commence_time,
+        homeML,awayML,homeSpreadPt:homeSpread?.point||null,homeSpreadPrice:homeSpread?.price||null,
+        awaySpreadPt:awaySpread?.point||null,awaySpreadPrice:awaySpread?.price||null,
+        overPt:over?.point||null,overPrice:over?.price||null,underPt:under?.point||null,underPrice:under?.price||null,
+        modelConf,modelEdge,modelTags,modelWinPct:modelConf?Math.round(modelConf*100):null};
+    }).filter(Boolean);
+    if(parsedGames.length===0){setParlayLoading(false);showToast("No FanDuel/DraftKings lines available.");return;}
+    
+    // Step 3: Build legs from REAL sportsbook data only — conf from implied probability
+    const buildLegs=(games,betType)=>{
+      const legs=[];
+      games.forEach(g=>{
+        if(betType==="ml"){
+          if(g.homeML===null&&g.awayML===null)return;
+          const favHome=g.homeML!==null&&g.awayML!==null?(g.homeML<g.awayML||(g.homeML<0&&g.awayML>0)):g.homeML!==null;
+          const pick=favHome?g.homeTeam:g.awayTeam;const opp=favHome?g.awayTeam:g.homeTeam;
+          const price=favHome?g.homeML:g.awayML;
+          const implied=americanToProb(price)||0.5;
+          legs.push({...g,betType:"ml",pick,opponent:opp,liveOdds:price,winner:pick,loser:opp,
+            winPct:Math.round(implied*100),conf:implied,
+            modelEdge:g.modelEdge||0,tags:g.modelTags||[]});
+        }else if(betType==="spread"){
+          if(g.homeSpreadPt===null)return;
+          const favHome=g.homeSpreadPt<0;
+          const pick=favHome?g.homeTeam:g.awayTeam;const opp=favHome?g.awayTeam:g.homeTeam;
+          const pt=favHome?g.homeSpreadPt:g.awaySpreadPt;const price=favHome?g.homeSpreadPrice:g.awaySpreadPrice;
+          const implied=americanToProb(price)||0.5;
+          legs.push({...g,betType:"spread",pick,opponent:opp,winner:pick,loser:opp,spreadPoint:pt,liveOdds:price,
+            winPct:Math.round(implied*100),conf:implied,
+            tags:[...(g.modelTags||[]).filter(t=>t!=="SPREAD"),"SPREAD"]});
+        }else if(betType==="total"){
+          if(g.overPt===null)return;
+          let isOver=true;
+          if(g.homeBracket&&g.awayBracket&&T[g.homeBracket]&&T[g.awayBracket]){
+            isOver=(T[g.homeBracket].tempo||65)+(T[g.awayBracket].tempo||65)>130;
           }
-        });
-      });
-      return bestOdds!==null?{american:bestOdds,implied:americanToProb(bestOdds),book:bestBook}:null;
-    };
-
-    // Gather all game predictions with live odds integration
-    const allPreds=Object.entries(MO).flatMap(([rk,matchups])=>
-      matchups.map(([a,b])=>{
-        const rawWP=getWP(a,b,boosts);const winner=rawWP>=0.5?a:b;const loser=rawWP>=0.5?b:a;
-        const rawConf=Math.max(rawWP,1-rawWP);
-        const calConf=calibrate(rawConf,T[winner].s,T[loser].s);
-        const ta=T[winner],tl=T[loser];
-        const clash=getStyleClash(winner,loser);
-        const injEdge=tl.inj?0.04:0;
-        const momEdge=(ta.mom-tl.mom)/200;
-        const clutchEdge=(ta.clutch-tl.clutch)/200;
-        const tempoEdge=clash?.tempoGap>12?-0.03:0;
-        const coachEdge=(ta.coach&&ta.exp>tl.exp)?0.02:0;
-        const totalEdge=injEdge+momEdge+clutchEdge+tempoEdge+coachEdge;
-        const finalConf=Math.min(0.97,Math.max(0.03,calConf+totalEdge));
-        
-        // Live odds integration
-        const live=findLiveLine(winner,loser);
-        const liveLoser=findLiveLine(loser,winner);
-        const vegasImpl=live?live.implied:null;
-        const ev=vegasImpl?(finalConf-vegasImpl):0;
-        const hasLive=!!live;
-        
-        // Get spread and total data — only if game matches our bracket matchup
-        let spreadData=null,totalData=null;
-        if(odds){
-          const gd=odds[winner];
-          // Verify the stored game is actually winner vs loser
-          if(gd&&(!gd.opponent||gd.opponent===loser)){
-            const fb=parlayBook==="ALL"?Object.keys(gd.books)[0]:gd.books[parlayBook]?parlayBook:Object.keys(gd.books)[0];
-            if(fb){
-              const bk=gd.books[fb];
-              const sp=bk?.spreads||{};const tot=bk?.totals||{};
-              Object.entries(sp).forEach(([name,data])=>{
-                const resolved=resolveAPIName(name);
-                if(resolved===winner){
-                  spreadData={point:data.point,price:data.price,book:fb};
-                }
-              });
-              const overData=Object.entries(tot).find(([k])=>k.toLowerCase()==="over");
-              const underData=Object.entries(tot).find(([k])=>k.toLowerCase()==="under");
-              if(overData)totalData={over:{point:overData[1].point,price:overData[1].price},under:underData?{point:underData[1].point,price:underData[1].price}:null,book:fb};
-            }
-          }
+          const pick=isOver?"Over":"Under";const price=isOver?g.overPrice:g.underPrice;
+          const implied=americanToProb(price)||0.5;
+          legs.push({...g,betType:"total",pick,opponent:`${g.homeTeam} vs ${g.awayTeam}`,winner:pick,loser:isOver?"Under":"Over",
+            totalPoint:g.overPt,totalSide:pick,liveOdds:price,gameA:g.homeTeam,gameB:g.awayTeam,
+            winPct:Math.round(implied*100),conf:implied,tags:["TOTAL"]});
         }
-        
-        return{
-          winner,loser,conf:finalConf,rawConf,winPct:Math.round(finalConf*100),
-          betType:"ml",
-          region:rk,regionName:RG[rk],seedW:ta.s,seedL:tl.s,
-          style:ta.style,defStyle:ta.defStyle,
-          injury:tl.inj||"",injW:ta.inj||"",
-          momentum:ta.mom,clutch:ta.clutch,sos:ta.sos,
-          tempoGap:clash?.tempoGap||0,totalEdge,
-          note:ta.note?.slice(0,80)||"",
-          liveOdds:live?.american||null,liveBook:live?.book||null,
-          vegasImpl,ev,hasLive,loserOdds:liveLoser?.american||null,
-          spreadData,totalData,
-          tags:[
-            ev>0.05?"+"+(ev*100).toFixed(0)+"% EV":"",
-            tl.inj?"INJURY EDGE":"",
-            ta.mom>=80?"HOT":"",
-            ta.clutch>=80?"CLUTCH":"",
-            ta.s<=2?"TOP SEED":"",
-            clash?.tempoGap>12?"TEMPO CLASH":"",
-            ta.sos>=70?"BATTLE TESTED":"",
-          ].filter(Boolean)
-        };
-      })
-    ).sort((a,b)=>b.conf-a.conf);
-
-    // Generate spread legs — ONLY from real sportsbook data
-    const spreadLegs=parlayBetTypes==="spread"?allPreds.filter(p=>p.spreadData).map(p=>{
-      const sd=p.spreadData;
-      const isFav=sd.point<0;
-      return{
-        ...p,betType:"spread",
-        betLabel:`${p.winner} ${sd.point>0?"+":""}${sd.point}`,
-        spreadPoint:sd.point,
-        liveOdds:sd.price,liveBook:sd.book,
-        conf:isFav?Math.max(0.3,p.conf-0.08):Math.min(0.95,p.conf+0.05),
-        winPct:isFav?Math.max(30,p.winPct-8):Math.min(95,p.winPct+5),
-        tags:[...p.tags.filter(t=>t!=="SPREAD"),"SPREAD"]
-      };
-    }):[];
-
-    // Generate total legs — ONLY from real sportsbook data
-    const totalLegs=parlayBetTypes==="total"?allPreds.filter(p=>p.totalData).map(p=>{
-      const td=p.totalData;
-      const wTempo=T[p.winner]?.tempo||65;
-      const lTempo=T[p.loser]?.tempo||65;
-      const avgTempo=wTempo+lTempo;
-      const isOver=avgTempo>130;
-      return{
-        ...p,betType:"total",
-        betLabel:`${isOver?"Over":"Under"} ${td.over?.point||0}`,
-        totalPoint:td.over?.point||0,totalSide:isOver?"Over":"Under",
-        gameA:p.winner,gameB:p.loser,
-        liveOdds:isOver?td.over?.price:td.under?.price,
-        liveBook:td.book,
-        conf:0.55,winPct:55,
-        tags:["TOTAL",avgTempo>140?"FAST PACE":"SLOW PACE"]
-      };
-    }):[];
-
-    // Build the leg pool based on selected bet types
-    const mlLegs=parlayBetTypes==="ml"?allPreds:[];
-    const allLegs=[...mlLegs,...spreadLegs,...totalLegs];
-
-    // Calculate combined payout using REAL odds when available, model odds as fallback
+      });
+      return legs;
+    };
+    const allLegs=buildLegs(parsedGames,parlayBetTypes);
+    if(allLegs.length===0){setParlayLoading(false);showToast(`No ${parlayBetTypes} lines available from sportsbooks.`);return;}
+    
+    const dedupe=(legs)=>{const seen=new Set();return legs.filter(l=>{if(seen.has(l.id))return false;seen.add(l.id);return true;});};
     const calcPayout=(legs)=>{
       let combined=1;
-      let allLive=true;
       legs.forEach(l=>{
         if(l.liveOdds!==null){
-          // Use real sportsbook decimal odds
           const am=l.liveOdds;
-          const decimal=am>0?(1+am/100):(1+100/Math.abs(am));
-          combined*=decimal;
-        }else{
-          allLive=false;
-          // ML leg without live data: use model probability with juice
-          const juicedProb=Math.min(0.95,l.conf*1.05);
-          combined*=(1/juicedProb);
+          combined*=am>0?(1+am/100):(1+100/Math.abs(am));
         }
       });
-      const hitRate=legs.reduce((a,l)=>a*l.conf,1)*100;
+      const hitRate=legs.reduce((a,l)=>{
+        const impl=l.liveOdds?americanToProb(l.liveOdds):0.5;
+        return a*impl;
+      },1)*100;
       const american=combined>=2?`+${Math.round((combined-1)*100)}`:`${Math.round(-100/(combined-1))}`;
-      const liveCount=legs.filter(l=>l.liveOdds!==null).length;
-      return{decimal:combined,american,payout:Math.round((combined-1)*100),hitRate:(hitRate||0).toFixed(3),liveCount,totalLegs:legs.length,allLive};
+      return{decimal:combined,american,payout:Math.round((combined-1)*100),hitRate:(hitRate||0).toFixed(3),liveCount:legs.length,totalLegs:legs.length};
     };
 
-    const dedupe=(legs)=>{
-      const seen=new Set();
-      return legs.filter(l=>{
-        const game=`${l.winner}-${l.loser}`;const gameR=`${l.loser}-${l.winner}`;
-        if(seen.has(game)||seen.has(gameR))return false;
-        seen.add(game);return true;
-      });
+    // ═══ COMPOSITE SCORING ENGINE ═══
+    // Score = model confidence × data backing strength × odds value
+    // Good parlay leg = high confidence SUPPORTED BY data, with decent odds
+    const scoreLeg=(leg)=>{
+      const mc=leg.modelConf||0.5;
+      const mPct=leg.modelWinPct||50;
+      // Data backing: how much supporting evidence exists
+      let dataBacking=0;
+      const tags=leg.modelTags||leg.tags||[];
+      if(tags.some(t=>t.includes("EV")))dataBacking+=0.25;
+      if(tags.includes("INJURY EDGE"))dataBacking+=0.20;
+      if(tags.includes("HOT"))dataBacking+=0.15;
+      if(tags.includes("CLUTCH"))dataBacking+=0.15;
+      if(tags.includes("BATTLE TESTED"))dataBacking+=0.10;
+      if(tags.includes("TOP SEED"))dataBacking+=0.05;
+      dataBacking=Math.min(1,dataBacking);
+      // Odds value: model confidence minus sportsbook implied
+      const implied=leg.liveOdds?americanToProb(leg.liveOdds):0.5;
+      const oddsValue=Math.max(0,mc-implied);
+      // Composite: confidence is king, data amplifies, odds value is bonus
+      const composite=(mc*0.50)+(dataBacking*0.30)+(oddsValue*0.20);
+      return{...leg,composite,dataBacking:Math.round(dataBacking*100),oddsValue:Math.round(oddsValue*100)};
     };
+    const scored=allLegs.map(scoreLeg).sort((a,b)=>b.composite-a.composite);
 
-    // Strategy 1: LOCKS — top confidence from all enabled bet types
-    const locks=dedupe(allLegs.filter(p=>p.winPct>=60).sort((a,b)=>b.conf-a.conf)).slice(0,parlayLegs);
-    
-    // Strategy 2: BALANCED — mixed bet types across regions
-    const byRegion={};allLegs.forEach(p=>{const r=p.region||"X";if(!byRegion[r])byRegion[r]=[];byRegion[r].push(p);});
-    const perRegion=Math.ceil(parlayLegs/4);
-    const balanced=dedupe(Object.values(byRegion).flatMap(rPreds=>{
-      const hi=rPreds.filter(p=>p.winPct>=70).slice(0,Math.ceil(perRegion*0.4));
-      const mid=rPreds.filter(p=>p.winPct>=55&&p.winPct<70).slice(0,Math.ceil(perRegion*0.3));
-      const mix=rPreds.filter(p=>p.betType!=="ml").slice(0,Math.ceil(perRegion*0.3));
-      return[...hi,...mid,...mix];
-    })).slice(0,parlayLegs);
-    
-    // Strategy 3: +EV PARLAY — prioritize positive expected value legs across all bet types
-    const evSorted=[...allLegs].filter(p=>p.winPct>=40).sort((a,b)=>{
-      // Primary sort: +EV legs first (model beats Vegas)
-      const evA=a.ev||0,evB=b.ev||0;
-      if(evA>0.03&&evB<=0.03)return -1;
-      if(evB>0.03&&evA<=0.03)return 1;
-      // Secondary: total edge score
-      return(b.totalEdge+evB)-(a.totalEdge+evA);
+    // LOCKS: highest composite (confidence + data + value all align)
+    const locks=dedupe(scored).slice(0,parlayLegs);
+    // DATA-BACKED: strongest analytics support regardless of odds
+    const dataSorted=[...scored].sort((a,b)=>{
+      const dA=(a.modelConf||0)*0.4+(a.dataBacking||0)/100*0.6;
+      const dB=(b.modelConf||0)*0.4+(b.dataBacking||0)/100*0.6;
+      return dB-dA;
     });
-    const moonshot=dedupe(evSorted).slice(0,parlayLegs);
-
-    const hasAnyLive=allLegs.some(p=>p.hasLive);
+    const smart=dedupe(dataSorted).slice(0,parlayLegs);
+    // VALUE: model says yes, book says maybe — unlikely odds but data backs it
+    const valueSorted=[...scored].sort((a,b)=>(b.oddsValue||0)-(a.oddsValue||0));
+    const value=dedupe(valueSorted).slice(0,parlayLegs);
     const localParlays={
-      locks:{name:"Locks Parlay",desc:`${parlayLegs} highest-confidence picks`,color:"var(--acc)",tag:"SAFE",legs:locks,payout:calcPayout(locks)},
-      balanced:{name:"Balanced Parlay",desc:"Spread across all 4 regions",color:"var(--green)",tag:"SMART",legs:balanced,payout:calcPayout(balanced)},
-      moonshot:{name:hasAnyLive?"+EV Parlay":"Edge Parlay",desc:hasAnyLive?"Model beats Vegas on these lines":"Best edge scores from analytics",color:"var(--orange)",tag:hasAnyLive?"+EV":"EDGE",legs:moonshot,payout:calcPayout(moonshot)},
+      locks:{name:"Locks Parlay",desc:"Confidence + data + odds all align",color:"var(--acc)",tag:"LOCKS",legs:locks,payout:calcPayout(locks)},
+      balanced:{name:"Data-Backed Parlay",desc:"Strongest analytics support",color:"var(--green)",tag:"DATA",legs:smart,payout:calcPayout(smart)},
+      moonshot:{name:"Value Parlay",desc:"Model says yes, book says maybe",color:"var(--orange)",tag:"VALUE",legs:value,payout:calcPayout(value)},
     };
-
     // AI mode
     if(parlayType==="auto"){
-      const betTypeLabels=[];
-      if(parlayBetTypes==="ml")betTypeLabels.push("Moneyline");
-      if(parlayBetTypes==="spread")betTypeLabels.push("Spread");
-      if(parlayBetTypes==="total")betTypeLabels.push("Over/Under Totals");
-      const betTypeStr=betTypeLabels.join(", ");
-      const topLegs=allLegs.sort((a,b)=>b.conf-a.conf).slice(0,30);
-      const gameData=topLegs.map(p=>{
-        if(p.betType==="spread")return`SPREAD: ${p.winner} ${p.spreadPoint>0?"+":""}${p.spreadPoint} vs ${p.loser}: ${p.winPct}%conf, ${p.regionName||""}${p.liveOdds?", line:"+p.liveOdds:""}`;
-        if(p.betType==="total")return`TOTAL: ${p.totalSide} ${p.totalPoint} (${p.gameA} vs ${p.gameB}): ${p.winPct}%conf${p.liveOdds?", line:"+p.liveOdds:""}`;
-        let line=`ML: ${p.winner}(${p.seedW}) over ${p.loser}(${p.seedL}): ${p.winPct}%conf, ${p.regionName}, edge:${(p.totalEdge*100).toFixed(1)}%`;
-        if(p.hasLive)line+=`, LIVE:${p.liveOdds>0?"+":""}${p.liveOdds}@${p.liveBook}`;
-        return line;
-      }).join("\n");
+      const gameData=allLegs.slice(0,24).map(l=>{
+        const modelStr=l.modelWinPct?` | Model: ${l.modelWinPct}% conf`:"";
+        const edgeStr=l.modelEdge>0.03?` | +${Math.round((l.modelEdge||0)*100)}% edge`:"";
+        const tagStr=l.modelTags?.length?` | [${l.modelTags.join(",")}]`:"";
+        if(l.betType==="ml")return`ML: ${l.pick} (${l.liveOdds>0?"+":""}${l.liveOdds} @${l.bookName}) over ${l.opponent}${modelStr}${edgeStr}${tagStr}`;
+        if(l.betType==="spread")return`SPR: ${l.pick} ${l.spreadPoint>0?"+":""}${l.spreadPoint} (${l.liveOdds} @${l.bookName}) vs ${l.opponent}${modelStr}${tagStr}`;
+        if(l.betType==="total")return`TOT: ${l.totalSide} ${l.totalPoint} (${l.liveOdds} @${l.bookName}) ${l.gameA} vs ${l.gameB}${modelStr}`;
+        return"";
+      }).filter(Boolean).join("\n");
+      const betLabel=parlayBetTypes==="ml"?"Moneyline":parlayBetTypes==="spread"?"Spread":"Over/Under Total";
       const prompt=`You are an elite sports betting analyst. Build NCAA tournament parlays.
 
-ALLOWED BET TYPES: ${betTypeStr}
-${parlayBetTypes!=="ml"?"IMPORTANT: Do NOT include any Moneyline bets. ONLY use "+betTypeStr+".":""}
-
-Available legs:
+REAL ${betLabel.toUpperCase()} LINES FROM ${parlayBook==="ALL"?"FANDUEL/DRAFTKINGS":parlayBook} with MODEL ANALYSIS:
 ${gameData}
 
-Build three ${parlayLegs}-leg parlays using ONLY these bet types: ${betTypeStr}
-1. LOCKS: Safest to hit
-2. BALANCED: Mix across regions
-3. +EV VALUE: Best edges
+SCORING SYSTEM:
+- "Model: X% conf" = analytics engine win probability (power ratings, injuries, momentum, clutch, style clashes, historical seed calibration)
+- "+X% edge" = model confidence exceeds sportsbook implied probability (the model thinks the team is undervalued)
+- Tags (INJURY EDGE, HOT, CLUTCH, BATTLE TESTED) = additional data backing the pick
+- A GOOD parlay leg has: real sportsbook odds + high model confidence + strong data backing
+- Even unlikely odds are good legs IF the data strongly supports it (e.g., +200 underdog but model says 60% and opponent has key injury)
 
-Rules: never both sides of same game, spread across regions, 1-sentence rationale per leg.
+Build three ${parlayLegs}-leg ${betLabel} parlays:
+1. LOCKS: Picks where sportsbook odds AND model confidence AND data all align strongly
+2. DATA-BACKED: Picks with the most supporting evidence (injuries, momentum, clutch, style edges) — data over odds
+3. VALUE: Picks where the model is MOST confident relative to what the book implies — the biggest disagreements backed by data
+
+Each rationale must explain: (a) what the odds are, (b) what the model says, and (c) what data supports it.
 
 JSON only, no markdown:
-{"locks":{"reasoning":"Why safe","legs":[{"pick":"Team","over":"Opponent","betType":"ml","spreadPoint":null,"totalPoint":null,"totalSide":null,"conf":85,"rationale":"reason"}]},"balanced":{"reasoning":"Strategy","legs":[same format]},"moonshot":{"reasoning":"EV","legs":[same format]}}
-betType must be: ${betTypeLabels.map(b=>b==="Moneyline"?"ml":b==="Spread"?"spread":"total").join(" or ")}. EXACTLY ${parlayLegs} legs per parlay.`;
+{"locks":{"reasoning":"Strategy","legs":[{"pick":"exact team name","over":"opponent","conf":85,"rationale":"odds + model + data reason"}]},"balanced":{"reasoning":"Strategy","legs":[same]},"moonshot":{"reasoning":"Strategy","legs":[same]}}
+EXACTLY ${parlayLegs} legs per parlay. Only games from the list above.`;
       try{
         const res=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},
           body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:3000,messages:[{role:"user",content:prompt}]})});
@@ -1393,35 +1344,18 @@ betType must be: ${betTypeLabels.map(b=>b==="Moneyline"?"ml":b==="Spread"?"sprea
           if(aiData[key]?.legs){
             localParlays[key].aiReasoning=aiData[key].reasoning;
             localParlays[key].legs=aiData[key].legs.map(l=>{
-              const bt=l.betType||"ml";
-              const pred=allPreds.find(p=>p.winner===l.pick||p.loser===l.pick)||{};
-              if(bt==="spread"){
-                return{...pred,betType:"spread",winner:l.pick,loser:l.over,
-                  spreadPoint:l.spreadPoint||pred.spreadData?.point||-3,
-                  conf:(l.conf||60)/100,winPct:l.conf||60,
-                  liveOdds:pred.spreadData?.price||null,liveBook:pred.spreadData?.book||null,
-                  aiRationale:l.rationale,region:pred.region||"",tags:["SPREAD",...(pred.tags||[]).filter(t=>t!=="SPREAD")]};
-              }else if(bt==="total"){
-                return{...pred,betType:"total",
-                  totalSide:l.totalSide||"Over",totalPoint:l.totalPoint||145,
-                  gameA:pred.winner||l.pick,gameB:pred.loser||l.over,
-                  winner:l.totalSide||"Over",loser:l.totalSide==="Over"?"Under":"Over",
-                  conf:(l.conf||55)/100,winPct:l.conf||55,
-                  liveOdds:null,liveBook:null,
-                  aiRationale:l.rationale,region:pred.region||"",tags:["TOTAL"]};
-              }else{
-                return pred.winner?{...pred,aiRationale:l.rationale}:{winner:l.pick,loser:l.over,conf:(l.conf||70)/100,winPct:l.conf||70,aiRationale:l.rationale,betType:"ml",region:"",tags:[],liveOdds:null,ev:0};
-              }
+              const match=allLegs.find(al=>al.pick===l.pick||al.homeTeam===l.pick||al.awayTeam===l.pick);
+              return match?{...match,aiRationale:l.rationale}:{pick:l.pick,opponent:l.over,betType:parlayBetTypes,liveOdds:null,conf:(l.conf||50)/100,winPct:l.conf||50,aiRationale:l.rationale,tags:[],modelTags:[]};
             });
             localParlays[key].payout=calcPayout(localParlays[key].legs);
           }
         });
       }catch(e){/* fallback to local */}
     }
-    
     setParlays(localParlays);
     setParlayLoading(false);
-  },[parlayLegs,parlayType,parlayBetTypes,parlayBook,boosts,liveOdds]);
+  },[parlayLegs,parlayType,parlayBetTypes,parlayBook,boosts,liveOdds,showToast]);
+
   const pick=useCallback((key,team)=>{
     const nb=[...brackets];const p={...nb[bIdx].picks,[key]:team};
     
@@ -1769,6 +1703,19 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               <span style={{fontSize:15,fontWeight:700,color:"var(--t2)"}}>{RG[rk]} Region</span>
             </div>
             {matchups.map(([a,b],i)=>{
+              if(a==="TBD"||b==="TBD"){
+                const realTeam=a==="TBD"?b:a;const ffSlot=FF_PENDING_SLOTS[`${rk}-0-${i}`];
+                return(
+                  <div key={i} className="gl" style={{padding:14,marginBottom:12,borderLeft:"3px solid var(--d)",opacity:0.6}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>({T[realTeam]?.s}) {realTeam}</span>
+                      <span style={{fontSize:12,color:"var(--d)"}}>vs</span>
+                      <span style={{fontSize:12,color:"var(--orange)"}}>Winner of {ffSlot?ffSlot.join(" / "):"First Four"}</span>
+                    </div>
+                    <div style={{fontSize:11,color:"var(--d)",marginTop:4}}>Awaiting First Four result</div>
+                  </div>
+                );
+              }
               const pred=getGamePrediction(a,b);if(!pred)return null;
               return(
                 <div key={i} className="gl" style={{padding:16,marginBottom:12,borderLeft:`3px solid ${pred.confColor}`}}>
@@ -2015,7 +1962,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
           {/* Upset alerts */}
           <div className="gl fu" style={{padding:14}}>
             <div style={{fontSize:14,fontWeight:700,color:"var(--t2)",marginBottom:20}}>First-Round Upset Alerts</div>
-            {Object.entries(MO).flatMap(([rk,ms])=>ms.map(([a,b])=>{const p=getWP(a,b);const up=1-p;if(up<0.28||T[b].s<=8)return null;return{r:rk,fav:a,dog:b,pct:up};}).filter(Boolean)).sort((a,b)=>b.pct-a.pct).slice(0,8).map((u,i)=>(
+            {Object.entries(MO).flatMap(([rk,ms])=>ms.map(([a,b])=>{if(a==="TBD"||b==="TBD")return null;const p=getWP(a,b);const up=1-p;if(up<0.28||T[b].s<=8)return null;return{r:rk,fav:a,dog:b,pct:up};}).filter(Boolean)).sort((a,b)=>b.pct-a.pct).slice(0,8).map((u,i)=>(
               <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
                 <div className="mn" style={{fontSize:15,fontWeight:800,color:u.pct>=0.45?"var(--red)":"var(--orange)",width:35,textAlign:"center"}}>{Math.round(u.pct*100)}%</div>
                 <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}><span style={{color:RC[u.r]}}>({T[u.dog].s})</span> {u.dog} over ({T[u.fav].s}) {u.fav}</div>
@@ -2074,7 +2021,14 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                       <div key={pi} style={{display:"flex",flexDirection:"column",justifyContent:"center",flex:1,gap:1}}>
                         {[a,b].map((tm,ti)=>{
                           if(!tm)return <div key={ti} style={{height:30,background:"rgba(255,255,255,0.015)",borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"var(--d)"}}>—</div>;
-                          const t=T[tm];const other=ti===0?b:a;const wp=other?getWP(tm,other):1;const sel=picked===tm;
+                          if(tm==="TBD"){
+                            const ffSlot=FF_PENDING_SLOTS[`${reg}-0-${pi}`];
+                            return <div key={ti} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 6px",borderRadius:5,background:"rgba(245,166,35,0.06)",border:"1px solid rgba(245,166,35,0.1)"}}>
+                              <span style={{fontSize:10,color:"var(--orange)",fontWeight:700}}>FF</span>
+                              <span style={{fontSize:11,color:"var(--orange)"}}>{ffSlot?ffSlot.join("/"):"TBD"}</span>
+                            </div>;
+                          }
+                          const t=T[tm];const other=ti===0?b:a;const wp=(other&&other!=="TBD")?getWP(tm,other):1;const sel=picked===tm;
                           return(
                             <div key={ti} onClick={()=>pick(key,tm)} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 6px",borderRadius:5,cursor:"pointer",background:sel?`${RC[reg]}12`:"rgba(255,255,255,0.015)",border:sel?`1px solid ${RC[reg]}50`:"1px solid rgba(255,255,255,0.03)",transition:"all 0.1s"}}>
                               <span style={{fontSize:11,fontWeight:800,color:t.s<=4?RC[reg]:"var(--d)",width:16,textAlign:"center"}}>{t.s}</span>
@@ -2194,6 +2148,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             <div style={{fontSize:14,fontWeight:700,color:"#fff",marginBottom:12}}>Live Game Lines</div>
             {Object.entries(MO).flatMap(([rk,matchups])=>
               matchups.map(([a,b],mi)=>{
+                if(a==="TBD"||b==="TBD")return null;
                 const oddsA=liveOdds[a];const oddsB=liveOdds[b];
                 // Only use odds if both teams match (prevents cross-game contamination)
                 const odds=(oddsA&&(!oddsA.opponent||oddsA.opponent===b))?oddsA:(oddsB&&(!oddsB.opponent||oddsB.opponent===a))?oddsB:null;
@@ -2491,7 +2446,8 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                 {/* Legs */}
                 <div style={{padding:"8px 0"}}>
                   {parlay.legs?.map((leg,li)=>{
-                    const confColor=leg.winPct>=80?"var(--green)":leg.winPct>=65?"var(--acc)":leg.winPct>=50?"var(--orange)":"var(--red)";
+                    const mConf=leg.modelWinPct||leg.winPct||50;
+                    const confColor=mConf>=80?"var(--green)":mConf>=65?"var(--acc)":mConf>=50?"var(--orange)":"var(--red)";
                     return(
                       <div key={li} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px",borderBottom:li<parlay.legs.length-1?"1px solid rgba(255,255,255,0.03)":"none"}}>
                         {/* Leg number */}
@@ -2546,15 +2502,19 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                           )}
                         </div>
                         
-                        {/* Confidence + live odds */}
-                        <div style={{flexShrink:0,textAlign:"right",minWidth:50}}>
-                          {leg.liveOdds!==null?(
-                            <div>
-                              <div className="mn" style={{fontSize:14,fontWeight:800,color:confColor}}>{leg.liveOdds>0?"+":""}{leg.liveOdds}</div>
-                              <div style={{fontSize:9,color:"var(--m)"}}>{leg.liveBook||""}</div>
+                        {/* Sportsbook odds (source of truth) + model confidence (supporting) */}
+                        <div style={{flexShrink:0,textAlign:"right",minWidth:62}}>
+                          <div className="mn" style={{fontSize:15,fontWeight:800,color:confColor}}>{leg.liveOdds!==null?`${leg.liveOdds>0?"+":""}${leg.liveOdds}`:"—"}</div>
+                          <div style={{fontSize:9,color:"var(--m)"}}>{leg.bookName||""}</div>
+                          {leg.modelWinPct&&(
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4,marginTop:3}}>
+                              <div style={{fontSize:9,color:"var(--acc)",fontWeight:600}}>{leg.modelWinPct}%</div>
+                              {leg.dataBacking>0&&(
+                                <div style={{width:20,height:4,borderRadius:2,background:"rgba(255,255,255,0.06)",overflow:"hidden"}}>
+                                  <div style={{width:`${Math.min(100,leg.dataBacking)}%`,height:"100%",borderRadius:2,background:leg.dataBacking>=60?"var(--green)":leg.dataBacking>=30?"var(--acc)":"var(--orange)"}}/>
+                                </div>
+                              )}
                             </div>
-                          ):(
-                            <div className="mn" style={{fontSize:14,fontWeight:800,color:confColor}}>{leg.winPct}%</div>
                           )}
                         </div>
                       </div>
@@ -2566,9 +2526,9 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                 <div style={{padding:"10px 16px",background:"rgba(255,255,255,0.015)",borderTop:"1px solid var(--b)",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
                   <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
                     <span style={{fontSize:11,color:"var(--m)"}}>{parlay.legs?.length} legs</span>
-                    <span style={{fontSize:11,color:"var(--m)"}}>Avg: <span className="mn" style={{color:"#fff"}}>{Math.round(parlay.legs?.reduce((a,l)=>a+l.winPct,0)/(parlay.legs?.length||1))}%</span></span>
-                    {parlay.payout?.liveCount>0&&(
-                      <span style={{fontSize:11,color:"var(--green)"}}>{parlay.payout.liveCount}/{parlay.payout.totalLegs} live</span>
+                    <span style={{fontSize:11,color:"var(--m)"}}>Implied: <span className="mn" style={{color:"#fff"}}>{Math.round(parlay.legs?.reduce((a,l)=>a+(l.winPct||50),0)/(parlay.legs?.length||1))}%</span></span>
+                    {parlay.legs?.some(l=>l.modelWinPct)&&(
+                      <span style={{fontSize:11,color:"var(--m)"}}>Model: <span className="mn" style={{color:"var(--acc)"}}>{Math.round(parlay.legs?.reduce((a,l)=>a+(l.modelWinPct||l.winPct||50),0)/(parlay.legs?.length||1))}%</span></span>
                     )}
                   </div>
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
