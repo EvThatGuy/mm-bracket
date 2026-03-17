@@ -451,6 +451,51 @@ button:disabled{opacity:0.5;cursor:not-allowed!important}
 export default function App(){
   const ALLOWED_BOOKS=["FanDuel","DraftKings"];
   const isAllowedBook=(name)=>ALLOWED_BOOKS.some(b=>name.toLowerCase().includes(b.toLowerCase()));
+  
+  // Exact mapping: Odds API team name → bracket team name
+  // This eliminates ALL fuzzy matching. If a team isn't in this map, it's ignored.
+  const API_TEAM_MAP={
+    "Duke Blue Devils":"Duke","Siena Saints":"Siena",
+    "Ohio State Buckeyes":"Ohio State","TCU Horned Frogs":"TCU",
+    "St John's Red Storm":"St. John's","St. John's Red Storm":"St. John's","Saint John's Red Storm":"St. John's",
+    "Northern Iowa Panthers":"N. Iowa",
+    "Kansas Jayhawks":"Kansas","California Baptist Lancers":"Cal Baptist","Cal Baptist Lancers":"Cal Baptist",
+    "Louisville Cardinals":"Louisville","South Florida Bulls":"S. Florida","USF Bulls":"S. Florida",
+    "Michigan State Spartans":"Michigan St","Michigan St Spartans":"Michigan St",
+    "North Dakota State Bison":"N. Dakota St","North Dakota St Bison":"N. Dakota St","NDSU Bison":"N. Dakota St",
+    "UCLA Bruins":"UCLA","UCF Knights":"UCF",
+    "UConn Huskies":"UConn","Connecticut Huskies":"UConn",
+    "Furman Paladins":"Furman",
+    "Arizona Wildcats":"Arizona","Long Island Sharks":"LIU","LIU Sharks":"LIU",
+    "Villanova Wildcats":"Villanova","Utah State Aggies":"Utah State",
+    "Wisconsin Badgers":"Wisconsin","High Point Panthers":"High Point",
+    "Arkansas Razorbacks":"Arkansas","Hawaii Rainbow Warriors":"Hawaii","Hawai'i Rainbow Warriors":"Hawaii",
+    "BYU Cougars":"BYU","NC State Wolfpack":"NC State",
+    "Gonzaga Bulldogs":"Gonzaga","Kennesaw State Owls":"Kennesaw St","Kennesaw St Owls":"Kennesaw St",
+    "Miami Hurricanes":"Miami FL","Miami (FL) Hurricanes":"Miami FL","Miami FL Hurricanes":"Miami FL",
+    "Missouri Tigers":"Missouri",
+    "Purdue Boilermakers":"Purdue","Queens Royals":"Queens NC","Queens NC Royals":"Queens NC",
+    "Florida Gators":"Florida","Lehigh Mountain Hawks":"Lehigh",
+    "Clemson Tigers":"Clemson","Iowa Hawkeyes":"Iowa",
+    "Vanderbilt Commodores":"Vanderbilt","McNeese Cowboys":"McNeese","McNeese State Cowboys":"McNeese",
+    "Nebraska Cornhuskers":"Nebraska","Troy Trojans":"Troy",
+    "North Carolina Tar Heels":"UNC","UNC Tar Heels":"UNC",
+    "VCU Rams":"VCU",
+    "Illinois Fighting Illini":"Illinois","Penn Quakers":"Penn","Pennsylvania Quakers":"Penn",
+    "Saint Mary's Gaels":"Saint Mary's","St. Mary's Gaels":"Saint Mary's",
+    "Texas A&M Aggies":"Texas A&M",
+    "Houston Cougars":"Houston","Idaho Vandals":"Idaho",
+    "Michigan Wolverines":"Michigan","Howard Bison":"Howard",
+    "Georgia Bulldogs":"Georgia","Saint Louis Billikens":"Saint Louis","St. Louis Billikens":"Saint Louis",
+    "Texas Tech Red Raiders":"Texas Tech","Akron Zips":"Akron",
+    "Alabama Crimson Tide":"Alabama","Hofstra Pride":"Hofstra",
+    "Tennessee Volunteers":"Tennessee","Miami (OH) RedHawks":"Miami OH","Miami OH RedHawks":"Miami OH","Miami Ohio RedHawks":"Miami OH",
+    "Virginia Cavaliers":"Virginia","Wright State Raiders":"Wright St","Wright St Raiders":"Wright St",
+    "Kentucky Wildcats":"Kentucky","Santa Clara Broncos":"Santa Clara",
+    "Iowa State Cyclones":"Iowa State","Tennessee State Tigers":"Tenn. State","Tennessee St Tigers":"Tenn. State",
+  };
+  // Reverse map for display: bracket name → possible API names
+  const resolveAPIName=(apiName)=>API_TEAM_MAP[apiName]||null;
   const [tab,setTab]=useState("brief");
   const [reg,setReg]=useState("E");
   const [sim,setSim]=useState(null);
@@ -699,16 +744,7 @@ Respond ONLY with JSON (no backticks):
         if(data.usage)setOddsUsage(data.usage);
         
         // Fuzzy match team name to our database
-        const matchTeam=(name)=>{
-          if(!name)return null;
-          const lower=name.toLowerCase();
-          return Object.keys(T).find(t=>{
-            const tl=t.toLowerCase();
-            return lower===tl||lower.includes(tl)||tl.includes(lower)||
-              lower.includes(tl.split(" ")[0])||(tl.includes(".")&&lower.includes(tl.replace(".","")))||
-              (T[t].c&&lower.includes(T[t].c.toLowerCase()));
-          });
-        };
+        const matchTeam=(name)=>name?resolveAPIName(name):null;
         
         // Auto-import completed games
         let imported=0;
@@ -955,19 +991,23 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
               totals:totals?.outcomes?.reduce((a,o)=>({...a,[o.name]:{price:o.price,point:o.point}}),{})||{},
             };
           });
-          // Match to our team database by fuzzy name matching
-          const matchTeam=(name)=>{
-            const lower=name.toLowerCase();
-            return Object.keys(T).find(t=>{
-              const tl=t.toLowerCase();
-              return lower.includes(tl)||tl.includes(lower)||
-                lower.includes(tl.split(" ")[0])||
-                (T[t].c&&lower.includes(T[t].c.toLowerCase()));
-            });
-          };
+          // Match to our team database - require BOTH teams to be in our bracket
+          const matchTeam=(name)=>resolveAPIName(name);
           const homeMatch=matchTeam(home);const awayMatch=matchTeam(away);
-          if(homeMatch)parsed[homeMatch]=gameData;
-          if(awayMatch)parsed[awayMatch]=gameData;
+          // Only store if both teams are in our 68-team database
+          if(homeMatch&&awayMatch){
+            // Verify they actually play each other in our bracket
+            let isRealMatchup=false;
+            Object.values(MO).forEach(matchups=>{
+              matchups.forEach(([a,b])=>{
+                if((a===homeMatch&&b===awayMatch)||(a===awayMatch&&b===homeMatch))isRealMatchup=true;
+              });
+            });
+            if(isRealMatchup){
+              parsed[homeMatch]={...gameData,opponent:awayMatch};
+              parsed[awayMatch]={...gameData,opponent:homeMatch};
+            }
+          }
         });
         setLiveOdds(parsed);
         setOddsUsage(data.usage);
@@ -979,9 +1019,8 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
           const bk=gd.books[fb];
           const h2h=bk?.h2h||{};const spreads=bk?.spreads||{};
           Object.entries(h2h).forEach(([name,price])=>{
-            const lower=name.toLowerCase();
-            const match=Object.keys(T).find(t=>lower.includes(t.toLowerCase())||lower.includes(t.toLowerCase().split(" ")[0]));
-            if(match)snapshot.lines[match]={ml:price,spread:Object.values(spreads)[0]?.point||null,book:fb};
+            const resolved=resolveAPIName(name);
+            if(resolved)snapshot.lines[resolved]={ml:price,spread:Object.values(spreads)[0]?.point||null,book:fb};
           });
         });
         const hist=[...oddsHistory,snapshot].slice(-20); // Keep last 20 snapshots
@@ -1035,16 +1074,14 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
                 spreads:spreads?.outcomes?.reduce((a,o)=>({...a,[o.name]:{price:o.price,point:o.point}}),{})||{},
               };
             });
-            const matchTeam=(name)=>{
-              const lower=name.toLowerCase();
-              return Object.keys(T).find(t=>{
-                const tl=t.toLowerCase();
-                return lower.includes(tl)||tl.includes(lower)||lower.includes(tl.split(" ")[0]);
-              });
-            };
+            const matchTeam=(name)=>resolveAPIName(name);
             const hm=matchTeam(game.home_team);const am=matchTeam(game.away_team);
-            if(hm)parsed[hm]=gameData;
-            if(am)parsed[am]=gameData;
+            // Only store if both teams match AND they play each other in our bracket
+            if(hm&&am){
+              let isReal=false;
+              Object.values(MO).forEach(ms=>{ms.forEach(([a,b])=>{if((a===hm&&b===am)||(a===am&&b===hm))isReal=true;});});
+              if(isReal){parsed[hm]={...gameData,opponent:am};parsed[am]={...gameData,opponent:hm};}
+            }
           });
           odds=parsed;setLiveOdds(parsed);
           setOddsUsage(data.usage);
@@ -1055,18 +1092,20 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
 
     // Helper: convert American odds to implied probability
     const americanToProb=(am)=>{if(!am||am===0)return null;return am>0?100/(am+100):Math.abs(am)/(Math.abs(am)+100);};
-    // Helper: find best moneyline for a team from live odds
-    const findLiveLine=(teamName)=>{
+    // Helper: find best moneyline for a team — verifies opponent matches
+    const findLiveLine=(teamName,expectedOpponent)=>{
       if(!odds)return null;
       const gameData=odds[teamName];
       if(!gameData)return null;
+      if(expectedOpponent&&gameData.opponent&&gameData.opponent!==expectedOpponent)return null;
       let bestOdds=null;let bestBook=null;
       const booksToCheck=parlayBook==="ALL"?Object.entries(gameData.books):Object.entries(gameData.books).filter(([name])=>name===parlayBook);
       booksToCheck.forEach(([bookName,bk])=>{
         const h2h=bk.h2h||{};
         Object.entries(h2h).forEach(([name,price])=>{
-          const nl=name.toLowerCase(),tl=teamName.toLowerCase();
-          if(nl.includes(tl)||tl.includes(nl)||nl.includes(tl.split(" ")[0])){
+          // Use exact map: resolve API name to bracket name and compare
+          const resolved=resolveAPIName(name);
+          if(resolved===teamName){
             if(bestOdds===null||price>bestOdds){bestOdds=price;bestBook=bookName;}
           }
         });
@@ -1091,29 +1130,28 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
         const finalConf=Math.min(0.97,Math.max(0.03,calConf+totalEdge));
         
         // Live odds integration
-        const live=findLiveLine(winner);
-        const liveLoser=findLiveLine(loser);
+        const live=findLiveLine(winner,loser);
+        const liveLoser=findLiveLine(loser,winner);
         const vegasImpl=live?live.implied:null;
         const ev=vegasImpl?(finalConf-vegasImpl):0;
         const hasLive=!!live;
         
-        // Get spread and total data
+        // Get spread and total data — only if game matches our bracket matchup
         let spreadData=null,totalData=null;
         if(odds){
-          const gd=odds[winner]||odds[loser];
-          if(gd){
+          const gd=odds[winner];
+          // Verify the stored game is actually winner vs loser
+          if(gd&&(!gd.opponent||gd.opponent===loser)){
             const fb=parlayBook==="ALL"?Object.keys(gd.books)[0]:gd.books[parlayBook]?parlayBook:Object.keys(gd.books)[0];
             if(fb){
               const bk=gd.books[fb];
               const sp=bk?.spreads||{};const tot=bk?.totals||{};
-              // Find winner's spread
               Object.entries(sp).forEach(([name,data])=>{
-                const nl=name.toLowerCase(),wl=winner.toLowerCase();
-                if(nl.includes(wl)||nl.includes(wl.split(" ")[0])){
+                const resolved=resolveAPIName(name);
+                if(resolved===winner){
                   spreadData={point:data.point,price:data.price,book:fb};
                 }
               });
-              // Get total
               const overData=Object.entries(tot).find(([k])=>k.toLowerCase()==="over");
               const underData=Object.entries(tot).find(([k])=>k.toLowerCase()==="under");
               if(overData)totalData={over:{point:overData[1].point,price:overData[1].price},under:underData?{point:underData[1].point,price:underData[1].price}:null,book:fb};
@@ -2080,7 +2118,8 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             {Object.entries(MO).flatMap(([rk,matchups])=>
               matchups.map(([a,b],mi)=>{
                 const oddsA=liveOdds[a];const oddsB=liveOdds[b];
-                const odds=oddsA||oddsB;
+                // Only use odds if both teams match (prevents cross-game contamination)
+                const odds=(oddsA&&(!oddsA.opponent||oddsA.opponent===b))?oddsA:(oddsB&&(!oddsB.opponent||oddsB.opponent===a))?oddsB:null;
                 if(!odds)return null;
                 const firstBook=Object.keys(odds.books)[0];
                 const bookData=firstBook?odds.books[firstBook]:null;
