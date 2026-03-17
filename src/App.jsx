@@ -464,8 +464,8 @@ export default function App(){
       const res=await fetch("/api/auth",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:authPw})});
       const data=await res.json();
       if(data.success){
-        setAuthed(true);
         try{localStorage.setItem("mm26-auth","true");}catch(e){}
+        window.location.reload();
       }else{
         setAuthError("Wrong password");
       }
