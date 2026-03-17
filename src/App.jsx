@@ -237,7 +237,7 @@ function getOddsShift(prevSim,newSim){
     const oldPct=oldCount/prevSim.n*100;
     const delta=newPct-oldPct;
     if(Math.abs(delta)>=0.5){
-      shifts.push({team,newPct:+newPct.toFixed(1),oldPct:+oldPct.toFixed(1),delta:+delta.toFixed(1),direction:delta>0?"up":"down"});
+      shifts.push({team,newPct:+(newPct||0).toFixed(1),oldPct:+(oldPct||0).toFixed(1),delta:+(delta||0).toFixed(1),direction:delta>0?"up":"down"});
     }
   });
   shifts.sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta));
@@ -532,7 +532,7 @@ export default function App(){
   const [oddsUsage,setOddsUsage]=useState(null);
   const [parlayLegs,setParlayLegs]=useState(8);
   const [parlayType,setParlayType]=useState("auto");
-  const [parlayBetTypes,setParlayBetTypes]=useState({ml:true,spread:false,total:false});
+  const [parlayBetTypes,setParlayBetTypes]=useState("ml");
   const [parlayBook,setParlayBook]=useState("ALL");
   const [oddsHistory,setOddsHistory]=useState([]);
   const [parlays,setParlays]=useState(null);
@@ -572,7 +572,7 @@ export default function App(){
     const injuries=Object.entries(T).filter(([,t])=>t.inj).map(([n,t])=>`${n} (${t.s}-seed): ${t.inj}`).join(", ");
     
     // Smart adaptation data
-    const boostSummary=Object.entries(boosts).filter(([,v])=>Math.abs(v)>=1).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([t,v])=>`${t}: ${v>0?"+":""}${v.toFixed(1)}`).join(", ");
+    const boostSummary=Object.entries(boosts).filter(([,v])=>Math.abs(v)>=1).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([t,v])=>`${t}: ${v>0?"+":""}${((v||0)).toFixed(1)}`).join(", ");
     const pathAlertSummary=pathAlerts.slice(0,5).map(a=>a.msg).join(" | ");
     const shiftSummary=oddsShifts.slice(0,5).map(s=>`${s.team}: ${s.oldPct}% -> ${s.newPct}% (${s.delta>0?"+":""}${s.delta})`).join(", ");
     
@@ -689,11 +689,16 @@ Respond ONLY with JSON (no backticks):
   // Score a bracket against results
   const scoreBracket=useCallback((picks)=>{
     let correct=0,wrong=0,pending=0,pts=0;
-    const roundPts={0:10,1:20,2:40,3:80,4:160,5:320};
+    const roundPts={0:10,1:20,2:40,3:80};
     Object.entries(picks).forEach(([key,pick])=>{
-      const rd=parseInt(key.split("-")[1]);
+      // Determine point value based on key format
+      let rdPts=10;
+      if(key==="CHAMP"){rdPts=320;}
+      else if(key.startsWith("F4")){rdPts=160;}
+      else{const rd=parseInt(key.split("-")[1]);rdPts=roundPts[rd]||10;}
+      
       if(results[key]){
-        if(results[key]===pick){correct++;pts+=(roundPts[rd]||10);}
+        if(results[key]===pick){correct++;pts+=rdPts;}
         else wrong++;
       }else pending++;
     });
@@ -1184,51 +1189,42 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
       })
     ).sort((a,b)=>b.conf-a.conf);
 
-    // Generate spread legs — use live data if available, otherwise estimate from model
-    const spreadLegs=parlayBetTypes.spread?allPreds.map(p=>{
+    // Generate spread legs — ONLY from real sportsbook data
+    const spreadLegs=parlayBetTypes==="spread"?allPreds.filter(p=>p.spreadData).map(p=>{
       const sd=p.spreadData;
-      // Estimate spread from win probability if no live data
-      const estSpread=sd?sd.point:Math.round((p.conf-0.5)*-30*10)/10; // rough: 60%→-3, 75%→-7.5, 90%→-12
-      const estPrice=sd?sd.price:-110;
-      const estBook=sd?sd.book:null;
-      const isFav=estSpread<0;
+      const isFav=sd.point<0;
       return{
         ...p,betType:"spread",
-        betLabel:`${p.winner} ${estSpread>0?"+":""}${estSpread}`,
-        spreadPoint:estSpread,
-        liveOdds:sd?estPrice:null,liveBook:estBook,
+        betLabel:`${p.winner} ${sd.point>0?"+":""}${sd.point}`,
+        spreadPoint:sd.point,
+        liveOdds:sd.price,liveBook:sd.book,
         conf:isFav?Math.max(0.3,p.conf-0.08):Math.min(0.95,p.conf+0.05),
         winPct:isFav?Math.max(30,p.winPct-8):Math.min(95,p.winPct+5),
         tags:[...p.tags.filter(t=>t!=="SPREAD"),"SPREAD"]
       };
     }):[];
 
-    // Generate total legs — use live data if available, otherwise estimate from tempo
-    const totalLegs=parlayBetTypes.total?allPreds.map(p=>{
+    // Generate total legs — ONLY from real sportsbook data
+    const totalLegs=parlayBetTypes==="total"?allPreds.filter(p=>p.totalData).map(p=>{
       const td=p.totalData;
       const wTempo=T[p.winner]?.tempo||65;
       const lTempo=T[p.loser]?.tempo||65;
       const avgTempo=wTempo+lTempo;
       const isOver=avgTempo>130;
-      // Estimate total from tempo if no live data: avg D1 game ~140, tempo adjusts
-      const estTotal=td?.over?.point||Math.round(120+(avgTempo-120)*0.4);
-      const estPrice=td?(isOver?td.over?.price:td.under?.price):null;
-      const estBook=td?td.book:null;
-      // Confidence: strong tempo signals = higher conf
-      const tempoConf=Math.abs(avgTempo-130)>15?0.60:0.52;
       return{
         ...p,betType:"total",
-        betLabel:`${isOver?"Over":"Under"} ${estTotal}`,
-        totalPoint:estTotal,totalSide:isOver?"Over":"Under",
+        betLabel:`${isOver?"Over":"Under"} ${td.over?.point||0}`,
+        totalPoint:td.over?.point||0,totalSide:isOver?"Over":"Under",
         gameA:p.winner,gameB:p.loser,
-        liveOdds:estPrice,liveBook:estBook,
-        conf:tempoConf,winPct:Math.round(tempoConf*100),
-        tags:["TOTAL",avgTempo>140?"FAST PACE":"SLOW PACE",Math.abs(avgTempo-130)>15?"STRONG SIGNAL":""]
+        liveOdds:isOver?td.over?.price:td.under?.price,
+        liveBook:td.book,
+        conf:0.55,winPct:55,
+        tags:["TOTAL",avgTempo>140?"FAST PACE":"SLOW PACE"]
       };
-    }).filter(p=>p.tags.some(t=>t)):[];
+    }):[];
 
     // Build the leg pool based on selected bet types
-    const mlLegs=parlayBetTypes.ml?allPreds:[];
+    const mlLegs=parlayBetTypes==="ml"?allPreds:[];
     const allLegs=[...mlLegs,...spreadLegs,...totalLegs];
 
     // Calculate combined payout using REAL odds when available, model odds as fallback
@@ -1243,7 +1239,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
           combined*=decimal;
         }else{
           allLive=false;
-          // Fallback: model probability with juice
+          // ML leg without live data: use model probability with juice
           const juicedProb=Math.min(0.95,l.conf*1.05);
           combined*=(1/juicedProb);
         }
@@ -1251,7 +1247,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
       const hitRate=legs.reduce((a,l)=>a*l.conf,1)*100;
       const american=combined>=2?`+${Math.round((combined-1)*100)}`:`${Math.round(-100/(combined-1))}`;
       const liveCount=legs.filter(l=>l.liveOdds!==null).length;
-      return{decimal:combined,american,payout:Math.round((combined-1)*100),hitRate:hitRate.toFixed(3),liveCount,totalLegs:legs.length,allLive};
+      return{decimal:combined,american,payout:Math.round((combined-1)*100),hitRate:(hitRate||0).toFixed(3),liveCount,totalLegs:legs.length,allLive};
     };
 
     const dedupe=(legs)=>{
@@ -1297,9 +1293,9 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
     // AI mode
     if(parlayType==="auto"){
       const betTypeLabels=[];
-      if(parlayBetTypes.ml)betTypeLabels.push("Moneyline");
-      if(parlayBetTypes.spread)betTypeLabels.push("Spread");
-      if(parlayBetTypes.total)betTypeLabels.push("Over/Under Totals");
+      if(parlayBetTypes==="ml")betTypeLabels.push("Moneyline");
+      if(parlayBetTypes==="spread")betTypeLabels.push("Spread");
+      if(parlayBetTypes==="total")betTypeLabels.push("Over/Under Totals");
       const betTypeStr=betTypeLabels.join(", ");
       const topLegs=allLegs.sort((a,b)=>b.conf-a.conf).slice(0,30);
       const gameData=topLegs.map(p=>{
@@ -1312,7 +1308,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
       const prompt=`You are an elite sports betting analyst. Build NCAA tournament parlays.
 
 ALLOWED BET TYPES: ${betTypeStr}
-${!parlayBetTypes.ml?"IMPORTANT: Do NOT include any Moneyline bets. ONLY use "+betTypeStr+".":""}
+${parlayBetTypes!=="ml"?"IMPORTANT: Do NOT include any Moneyline bets. ONLY use "+betTypeStr+".":""}
 
 Available legs:
 ${gameData}
@@ -1369,9 +1365,26 @@ betType must be: ${betTypeLabels.map(b=>b==="Moneyline"?"ml":b==="Spread"?"sprea
   },[parlayLegs,parlayType,parlayBetTypes,parlayBook,boosts,liveOdds]);
   const pick=useCallback((key,team)=>{
     const nb=[...brackets];const p={...nb[bIdx].picks,[key]:team};
-    // Clear downstream
-    const [rk,rs,ps]=key.split("-");const rd=parseInt(rs),pi=parseInt(ps);
-    for(let r=rd+1;r<=3;r++){const dk=`${rk}-${r}-${Math.floor(pi/Math.pow(2,r-rd))}`;delete p[dk];}
+    
+    if(key==="CHAMP"){
+      // No downstream to clear
+    }else if(key.startsWith("F4")){
+      // Changing a F4 pick clears the championship
+      delete p["CHAMP"];
+    }else{
+      // Regional pick — clear downstream regional rounds
+      const [rk,rs,ps]=key.split("-");const rd=parseInt(rs),pi=parseInt(ps);
+      for(let r=rd+1;r<=3;r++){const dk=`${rk}-${r}-${Math.floor(pi/Math.pow(2,r-rd))}`;delete p[dk];}
+      // If E8 winner changed, clear F4 and CHAMP for this region's semifinal
+      if(rd<=3){
+        const regionIdx={"E":0,"W":1,"S":0,"MW":1};
+        // E vs S = F4-0, W vs MW = F4-1
+        const f4Key=(rk==="E"||rk==="S")?"F4-0":"F4-1";
+        delete p[f4Key];
+        delete p["CHAMP"];
+      }
+    }
+    
     nb[bIdx]={...nb[bIdx],picks:p};save(nb);
   },[brackets,bIdx,save]);
 
@@ -2204,10 +2217,10 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                     <div style={{fontSize:11,color:"var(--m)"}}>{v.vegasOdds}</div>
                   </div>
                 </div>
-                <span className="mn" style={{textAlign:"center",fontSize:13,color:"var(--m)"}}>{v.vegasPct.toFixed(1)}%</span>
-                <span className="mn" style={{textAlign:"center",fontSize:13,color:"#fff"}}>{v.modelPct.toFixed(1)}%</span>
+                <span className="mn" style={{textAlign:"center",fontSize:13,color:"var(--m)"}}>{(v.vegasPct||0).toFixed(1)}%</span>
+                <span className="mn" style={{textAlign:"center",fontSize:13,color:"#fff"}}>{(v.modelPct||0).toFixed(1)}%</span>
                 <span className="mn" style={{textAlign:"center",fontSize:13,fontWeight:800,color:v.edge>2?"var(--green)":v.edge>0?"var(--orange)":"var(--red)"}}>
-                  {v.edge>0?"+":""}{v.edge.toFixed(1)}%
+                  {v.edge>0?"+":""}{(v.edge||0).toFixed(1)}%
                 </span>
               </div>
             ))}
@@ -2323,10 +2336,10 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
           <div style={{fontSize:12,fontWeight:700,color:"var(--m)",marginBottom:8,letterSpacing:0.3}}>BET TYPES</div>
           <div style={{display:"flex",gap:6,marginBottom:16}}>
             {[{id:"ml",label:"Moneyline"},{id:"spread",label:"Spreads"},{id:"total",label:"Totals"}].map(bt=>(
-              <div key={bt.id} onClick={()=>setParlayBetTypes(p=>({...p,[bt.id]:!p[bt.id]}))} style={{flex:1,padding:"10px",borderRadius:8,cursor:"pointer",textAlign:"center",
-                background:parlayBetTypes[bt.id]?"rgba(20,147,255,0.08)":"var(--s2)",
-                border:parlayBetTypes[bt.id]?"1px solid var(--acc)":"1px solid var(--b)",transition:"all 0.15s"}}>
-                <div style={{fontSize:12,fontWeight:700,color:parlayBetTypes[bt.id]?"var(--acc)":"var(--m)"}}>{bt.label}</div>
+              <div key={bt.id} onClick={()=>setParlayBetTypes(bt.id)} style={{flex:1,padding:"10px",borderRadius:8,cursor:"pointer",textAlign:"center",
+                background:parlayBetTypes===bt.id?"rgba(20,147,255,0.08)":"var(--s2)",
+                border:parlayBetTypes===bt.id?"1px solid var(--acc)":"1px solid var(--b)",transition:"all 0.15s"}}>
+                <div style={{fontSize:12,fontWeight:700,color:parlayBetTypes===bt.id?"var(--acc)":"var(--m)"}}>{bt.label}</div>
               </div>
             ))}
           </div>
@@ -2342,6 +2355,13 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               </div>
             ))}
           </div>
+
+          {/* No live data warning */}
+          {(parlayBetTypes==="spread"||parlayBetTypes==="total")&&!liveOdds&&(
+            <div style={{padding:"10px 12px",borderRadius:8,background:"rgba(245,166,35,0.06)",border:"1px solid rgba(245,166,35,0.15)",marginBottom:14}}>
+              <div style={{fontSize:12,color:"var(--orange)",lineHeight:1.5}}>Spread and total lines require live odds data. Hit "Build" and the system will auto-fetch from FanDuel/DraftKings. If the books haven't posted lines for a game, that game won't appear as a spread/total leg.</div>
+            </div>
+          )}
 
           {/* Build button */}
           <button className="btn-green" onClick={buildParlays} disabled={parlayLoading} style={{width:"100%",padding:"14px",borderRadius:8,fontSize:15,fontFamily:"'DM Sans'",cursor:"pointer",letterSpacing:0.2}}>
@@ -2370,6 +2390,13 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                 </div>
               ))}
             </div>
+
+            {/* Notice if spread/total returned no legs */}
+            {(parlayBetTypes==="spread"||parlayBetTypes==="total")&&parlays&&Object.values(parlays).every(p=>p.legs?.every(l=>l.betType==="ml"||!l.betType))&&(
+              <div style={{padding:"10px 12px",borderRadius:8,background:"rgba(245,166,35,0.06)",border:"1px solid rgba(245,166,35,0.15)",marginBottom:14}}>
+                <div style={{fontSize:12,color:"var(--orange)",lineHeight:1.5}}>No spread/total lines available from sportsbooks right now. All legs are moneyline. Lines typically post 1-2 days before tip-off — try again closer to game time.</div>
+              </div>
+            )}
 
             {/* Detailed parlay cards */}
             {Object.entries(parlays).map(([key,parlay])=>(
@@ -2634,7 +2661,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               </div>
               <div style={{display:"flex",gap:8}}>
                 <div style={{textAlign:"center"}}>
-                  <div className="mn" style={{fontSize:14,fontWeight:800,color:d.overSeed<1.0?"var(--green)":"var(--red)"}}>{d.overSeed.toFixed(2)}</div>
+                  <div className="mn" style={{fontSize:14,fontWeight:800,color:d.overSeed<1.0?"var(--green)":"var(--red)"}}>{(d.overSeed||0).toFixed(2)}</div>
                   <div style={{fontSize:13,color:"var(--d)"}}>Seed Factor</div>
                 </div>
                 <div style={{textAlign:"center"}}>
