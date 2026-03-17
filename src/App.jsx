@@ -1146,34 +1146,48 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
       })
     ).sort((a,b)=>b.conf-a.conf);
 
-    // Generate spread and total legs from ML predictions
-    // Generate spread legs from ML predictions
-    const spreadLegs=parlayBetTypes.spread?allPreds.filter(p=>p.spreadData).map(p=>({
-      ...p,betType:"spread",
-      betLabel:`${p.winner} ${p.spreadData.point>0?"+":""}${p.spreadData.point}`,
-      spreadPoint:p.spreadData.point,
-      liveOdds:p.spreadData.price,liveBook:p.spreadData.book,
-      conf:p.spreadData.point<0?Math.max(0.3,p.conf-0.08):Math.min(0.95,p.conf+0.05),
-      winPct:p.spreadData.point<0?Math.max(30,p.winPct-8):Math.min(95,p.winPct+5),
-      tags:[...p.tags.filter(t=>t!=="SPREAD"),"SPREAD"]
-    })):[];
-
-    const totalLegs=parlayBetTypes.total?allPreds.filter(p=>p.totalData).map(p=>{
-      const avgTempo=(T[p.winner]?.tempo||65)+(T[p.loser]?.tempo||65);
-      const isOver=avgTempo>130;
-      const totalPt=p.totalData.over?.point||0;
+    // Generate spread legs — use live data if available, otherwise estimate from model
+    const spreadLegs=parlayBetTypes.spread?allPreds.map(p=>{
+      const sd=p.spreadData;
+      // Estimate spread from win probability if no live data
+      const estSpread=sd?sd.point:Math.round((p.conf-0.5)*-30*10)/10; // rough: 60%→-3, 75%→-7.5, 90%→-12
+      const estPrice=sd?sd.price:-110;
+      const estBook=sd?sd.book:null;
+      const isFav=estSpread<0;
       return{
-        ...p,betType:"total",
-        betLabel:`${isOver?"Over":"Under"} ${totalPt}`,
-        totalPoint:totalPt,totalSide:isOver?"Over":"Under",
-        // Keep original winner/loser for game context display
-        gameA:p.winner,gameB:p.loser,
-        liveOdds:isOver?p.totalData.over?.price:p.totalData.under?.price,
-        liveBook:p.totalData.book,
-        conf:0.55,winPct:55,
-        tags:["TOTAL",avgTempo>140?"FAST PACE":"SLOW PACE"]
+        ...p,betType:"spread",
+        betLabel:`${p.winner} ${estSpread>0?"+":""}${estSpread}`,
+        spreadPoint:estSpread,
+        liveOdds:sd?estPrice:null,liveBook:estBook,
+        conf:isFav?Math.max(0.3,p.conf-0.08):Math.min(0.95,p.conf+0.05),
+        winPct:isFav?Math.max(30,p.winPct-8):Math.min(95,p.winPct+5),
+        tags:[...p.tags.filter(t=>t!=="SPREAD"),"SPREAD"]
       };
     }):[];
+
+    // Generate total legs — use live data if available, otherwise estimate from tempo
+    const totalLegs=parlayBetTypes.total?allPreds.map(p=>{
+      const td=p.totalData;
+      const wTempo=T[p.winner]?.tempo||65;
+      const lTempo=T[p.loser]?.tempo||65;
+      const avgTempo=wTempo+lTempo;
+      const isOver=avgTempo>130;
+      // Estimate total from tempo if no live data: avg D1 game ~140, tempo adjusts
+      const estTotal=td?.over?.point||Math.round(120+(avgTempo-120)*0.4);
+      const estPrice=td?(isOver?td.over?.price:td.under?.price):null;
+      const estBook=td?td.book:null;
+      // Confidence: strong tempo signals = higher conf
+      const tempoConf=Math.abs(avgTempo-130)>15?0.60:0.52;
+      return{
+        ...p,betType:"total",
+        betLabel:`${isOver?"Over":"Under"} ${estTotal}`,
+        totalPoint:estTotal,totalSide:isOver?"Over":"Under",
+        gameA:p.winner,gameB:p.loser,
+        liveOdds:estPrice,liveBook:estBook,
+        conf:tempoConf,winPct:Math.round(tempoConf*100),
+        tags:["TOTAL",avgTempo>140?"FAST PACE":"SLOW PACE",Math.abs(avgTempo-130)>15?"STRONG SIGNAL":""]
+      };
+    }).filter(p=>p.tags.some(t=>t)):[];
 
     // Build the leg pool based on selected bet types
     const mlLegs=parlayBetTypes.ml?allPreds:[];
@@ -1244,48 +1258,67 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
 
     // AI mode
     if(parlayType==="auto"){
-      const gameData=allPreds.slice(0,24).map(p=>{
-        let line=`${p.winner}(${p.seedW}) over ${p.loser}(${p.seedL}): ${p.winPct}%conf, ${p.regionName}, edge:${(p.totalEdge*100).toFixed(1)}%`;
-        if(p.hasLive)line+=`, LIVE:${p.liveOdds>0?"+":""}${p.liveOdds}@${p.liveBook}, EV:${(p.ev*100).toFixed(1)}%`;
-        if(p.tags.length>0)line+=`, [${p.tags.join(",")}]`;
+      const betTypeLabels=[];
+      if(parlayBetTypes.ml)betTypeLabels.push("Moneyline");
+      if(parlayBetTypes.spread)betTypeLabels.push("Spread");
+      if(parlayBetTypes.total)betTypeLabels.push("Over/Under Totals");
+      const betTypeStr=betTypeLabels.join(", ");
+      const topLegs=allLegs.sort((a,b)=>b.conf-a.conf).slice(0,30);
+      const gameData=topLegs.map(p=>{
+        if(p.betType==="spread")return`SPREAD: ${p.winner} ${p.spreadPoint>0?"+":""}${p.spreadPoint} vs ${p.loser}: ${p.winPct}%conf, ${p.regionName||""}${p.liveOdds?", line:"+p.liveOdds:""}`;
+        if(p.betType==="total")return`TOTAL: ${p.totalSide} ${p.totalPoint} (${p.gameA} vs ${p.gameB}): ${p.winPct}%conf${p.liveOdds?", line:"+p.liveOdds:""}`;
+        let line=`ML: ${p.winner}(${p.seedW}) over ${p.loser}(${p.seedL}): ${p.winPct}%conf, ${p.regionName}, edge:${(p.totalEdge*100).toFixed(1)}%`;
+        if(p.hasLive)line+=`, LIVE:${p.liveOdds>0?"+":""}${p.liveOdds}@${p.liveBook}`;
         return line;
       }).join("\n");
-      
-      const prompt=`You are an elite sports betting analyst. Build NCAA tournament parlays using calibrated predictions + live sportsbook odds.
+      const prompt=`You are an elite sports betting analyst. Build NCAA tournament parlays.
 
+ALLOWED BET TYPES: ${betTypeStr}
+${!parlayBetTypes.ml?"IMPORTANT: Do NOT include any Moneyline bets. ONLY use "+betTypeStr+".":""}
+
+Available legs:
 ${gameData}
 
-KEY: "EV" = model probability minus Vegas implied probability. Positive EV means the model thinks the team is MORE likely to win than Vegas does — these are VALUE bets.
+Build three ${parlayLegs}-leg parlays using ONLY these bet types: ${betTypeStr}
+1. LOCKS: Safest to hit
+2. BALANCED: Mix across regions
+3. +EV VALUE: Best edges
 
-Build three ${parlayLegs}-leg parlays:
-1. LOCKS: Highest confidence, safest to hit
-2. BALANCED: Mix of confidence levels spread across regions  
-3. +EV VALUE: PRIORITIZE legs with positive EV — where our model disagrees with Vegas. These are the highest-value bets even if confidence is lower.
-
-Rules:
-- Never both sides of same game
-- Spread across regions
-- For +EV parlay, at least half the legs should have positive EV
-- Each leg needs a 1-sentence rationale mentioning the edge
+Rules: never both sides of same game, spread across regions, 1-sentence rationale per leg.
 
 JSON only, no markdown:
-{"locks":{"reasoning":"Why safe","legs":[{"pick":"Team","over":"Opponent","conf":85,"rationale":"reason"}]},"balanced":{"reasoning":"Strategy","legs":[{"pick":"Team","over":"Opponent","conf":70,"rationale":"reason"}]},"moonshot":{"reasoning":"EV strategy","legs":[{"pick":"Team","over":"Opponent","conf":55,"rationale":"reason"}]}}
-EXACTLY ${parlayLegs} legs per parlay.`;
-
+{"locks":{"reasoning":"Why safe","legs":[{"pick":"Team","over":"Opponent","betType":"ml","spreadPoint":null,"totalPoint":null,"totalSide":null,"conf":85,"rationale":"reason"}]},"balanced":{"reasoning":"Strategy","legs":[same format]},"moonshot":{"reasoning":"EV","legs":[same format]}}
+betType must be: ${betTypeLabels.map(b=>b==="Moneyline"?"ml":b==="Spread"?"spread":"total").join(" or ")}. EXACTLY ${parlayLegs} legs per parlay.`;
       try{
         const res=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2500,messages:[{role:"user",content:prompt}]})});
+          body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:3000,messages:[{role:"user",content:prompt}]})});
         const d=await res.json();
         const txt=d.content?.filter(b=>b.type==="text").map(b=>b.text).join("")||"";
         const clean=txt.replace(/```json|```/g,"").replace(/<[^>]+>/g,"").trim();
         const aiData=JSON.parse(clean);
-        
         ["locks","balanced","moonshot"].forEach(key=>{
           if(aiData[key]?.legs){
             localParlays[key].aiReasoning=aiData[key].reasoning;
             localParlays[key].legs=aiData[key].legs.map(l=>{
-              const pred=allPreds.find(p=>p.winner===l.pick);
-              return pred?{...pred,aiRationale:l.rationale}:{winner:l.pick,loser:l.over,conf:l.conf/100,winPct:l.conf,aiRationale:l.rationale,region:"",tags:[],liveOdds:null,ev:0};
+              const bt=l.betType||"ml";
+              const pred=allPreds.find(p=>p.winner===l.pick||p.loser===l.pick)||{};
+              if(bt==="spread"){
+                return{...pred,betType:"spread",winner:l.pick,loser:l.over,
+                  spreadPoint:l.spreadPoint||pred.spreadData?.point||-3,
+                  conf:(l.conf||60)/100,winPct:l.conf||60,
+                  liveOdds:pred.spreadData?.price||null,liveBook:pred.spreadData?.book||null,
+                  aiRationale:l.rationale,region:pred.region||"",tags:["SPREAD",...(pred.tags||[]).filter(t=>t!=="SPREAD")]};
+              }else if(bt==="total"){
+                return{...pred,betType:"total",
+                  totalSide:l.totalSide||"Over",totalPoint:l.totalPoint||145,
+                  gameA:pred.winner||l.pick,gameB:pred.loser||l.over,
+                  winner:l.totalSide||"Over",loser:l.totalSide==="Over"?"Under":"Over",
+                  conf:(l.conf||55)/100,winPct:l.conf||55,
+                  liveOdds:null,liveBook:null,
+                  aiRationale:l.rationale,region:pred.region||"",tags:["TOTAL"]};
+              }else{
+                return pred.winner?{...pred,aiRationale:l.rationale}:{winner:l.pick,loser:l.over,conf:(l.conf||70)/100,winPct:l.conf||70,aiRationale:l.rationale,betType:"ml",region:"",tags:[],liveOdds:null,ev:0};
+              }
             });
             localParlays[key].payout=calcPayout(localParlays[key].legs);
           }
