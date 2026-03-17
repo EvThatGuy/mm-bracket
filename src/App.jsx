@@ -1509,7 +1509,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                 <div style={{width:9,height:9,borderRadius:"50%",background:"var(--green)",boxShadow:"0 0 6px var(--green), 0 0 12px rgba(47,189,96,0.4)",animation:"liveDot 1.8s ease-in-out infinite"}}/>
                 <span style={{fontSize:12,color:"var(--green)",fontWeight:700,letterSpacing:1,animation:"liveText 1.8s ease-in-out infinite"}}>LIVE</span>
               </div>
-              <div onClick={()=>{try{localStorage.removeItem("mm26-auth");}catch(e){}setAuthed(false);}} style={{padding:"6px 10px",borderRadius:6,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.06)"}}>
+              <div onClick={()=>{try{localStorage.removeItem("mm26-auth");}catch(e){}window.location.reload();}} style={{padding:"6px 10px",borderRadius:6,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.06)"}}>
                 <span style={{fontSize:10,color:"var(--m)",fontWeight:600}}>Logout</span>
               </div>
             </div>
