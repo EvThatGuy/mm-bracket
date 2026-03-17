@@ -449,6 +449,8 @@ button:disabled{opacity:0.5;cursor:not-allowed!important}
 `;
 
 export default function App(){
+  const ALLOWED_BOOKS=["FanDuel","DraftKings"];
+  const isAllowedBook=(name)=>ALLOWED_BOOKS.some(b=>name.toLowerCase().includes(b.toLowerCase()));
   const [tab,setTab]=useState("brief");
   const [reg,setReg]=useState("E");
   const [sim,setSim]=useState(null);
@@ -895,10 +897,11 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
       ctx.fillText(`${i+1}`,20,ly+22);
       // Pick
       ctx.fillStyle="#ffffff";ctx.font="bold 13px 'DM Sans',sans-serif";
-      const pickName=leg.winner||(leg.betLabel||"");
+      const pickName=leg.betType==="spread"?`${leg.winner} ${leg.spreadPoint>0?"+":""}${leg.spreadPoint}`:leg.betType==="total"?`${leg.totalSide} ${leg.totalPoint} (${leg.gameA||leg.winner} vs ${leg.gameB||leg.loser})`:leg.winner||"";
       ctx.fillText(pickName,42,ly+16);
       ctx.fillStyle="rgba(255,255,255,0.3)";ctx.font="11px 'DM Sans',sans-serif";
-      ctx.fillText(`over ${leg.loser||""}`,42,ly+30);
+      const subText=leg.betType==="spread"?`vs ${leg.loser}`:leg.betType==="total"?"":(`over ${leg.loser||""}`);
+      ctx.fillText(subText,42,ly+30);
       // Bet type badge
       if(leg.betType&&leg.betType!=="ml"){
         ctx.fillStyle=accent+"20";
@@ -940,7 +943,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
         const parsed={};
         data.odds.forEach(game=>{
           const home=game.home_team;const away=game.away_team;
-          const bookmakers=game.bookmakers||[];
+          const bookmakers=(game.bookmakers||[]).filter(bk=>isAllowedBook(bk.title));
           const gameData={home,away,commence:game.commence_time,books:{}};
           bookmakers.forEach(bk=>{
             const h2h=bk.markets?.find(m=>m.key==="h2h");
@@ -1022,7 +1025,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
         if(data.odds&&Array.isArray(data.odds)){
           const parsed={};
           data.odds.forEach(game=>{
-            const bookmakers=game.bookmakers||[];
+            const bookmakers=(game.bookmakers||[]).filter(bk=>isAllowedBook(bk.title));
             const gameData={home:game.home_team,away:game.away_team,commence:game.commence_time,books:{}};
             bookmakers.forEach(bk=>{
               const h2h=bk.markets?.find(m=>m.key==="h2h");
@@ -1144,34 +1147,37 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
     ).sort((a,b)=>b.conf-a.conf);
 
     // Generate spread and total legs from ML predictions
+    // Generate spread legs from ML predictions
     const spreadLegs=parlayBetTypes.spread?allPreds.filter(p=>p.spreadData).map(p=>({
       ...p,betType:"spread",
       betLabel:`${p.winner} ${p.spreadData.point>0?"+":""}${p.spreadData.point}`,
+      spreadPoint:p.spreadData.point,
       liveOdds:p.spreadData.price,liveBook:p.spreadData.book,
-      // Favorites covering is slightly less likely than winning outright
       conf:p.spreadData.point<0?Math.max(0.3,p.conf-0.08):Math.min(0.95,p.conf+0.05),
       winPct:p.spreadData.point<0?Math.max(30,p.winPct-8):Math.min(95,p.winPct+5),
-      tags:[...p.tags,"SPREAD"]
+      tags:[...p.tags.filter(t=>t!=="SPREAD"),"SPREAD"]
     })):[];
 
     const totalLegs=parlayBetTypes.total?allPreds.filter(p=>p.totalData).map(p=>{
-      // Use tempo to predict over/under: fast teams = over, slow = over
       const avgTempo=(T[p.winner]?.tempo||65)+(T[p.loser]?.tempo||65);
       const isOver=avgTempo>130;
+      const totalPt=p.totalData.over?.point||0;
       return{
         ...p,betType:"total",
-        betLabel:`${isOver?"Over":"Under"} ${p.totalData.over?.point||0}`,
-        winner:isOver?"Over":"Under",loser:isOver?"Under":"Over",
+        betLabel:`${isOver?"Over":"Under"} ${totalPt}`,
+        totalPoint:totalPt,totalSide:isOver?"Over":"Under",
+        // Keep original winner/loser for game context display
+        gameA:p.winner,gameB:p.loser,
         liveOdds:isOver?p.totalData.over?.price:p.totalData.under?.price,
         liveBook:p.totalData.book,
-        conf:0.55, // totals are harder to predict
-        winPct:55,
+        conf:0.55,winPct:55,
         tags:["TOTAL",avgTempo>140?"FAST PACE":"SLOW PACE"]
       };
     }):[];
 
-    // Combine all available legs
-    const allLegs=[...allPreds,...spreadLegs,...totalLegs];
+    // Build the leg pool based on selected bet types
+    const mlLegs=parlayBetTypes.ml?allPreds:[];
+    const allLegs=[...mlLegs,...spreadLegs,...totalLegs];
 
     // Calculate combined payout using REAL odds when available, model odds as fallback
     const calcPayout=(legs)=>{
@@ -1205,19 +1211,16 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
       });
     };
 
-    // Strategy 1: LOCKS — top confidence (ML primary, mix in spreads if enabled)
-    const mlLocks=dedupe(allPreds.filter(p=>p.winPct>=65));
-    const spreadLocks=dedupe(spreadLegs.filter(p=>p.winPct>=55));
-    const lockPool=parlayBetTypes.spread?[...mlLocks.slice(0,Math.ceil(parlayLegs*0.7)),...spreadLocks.slice(0,Math.floor(parlayLegs*0.3))]:mlLocks;
-    const locks=lockPool.slice(0,parlayLegs);
+    // Strategy 1: LOCKS — top confidence from all enabled bet types
+    const locks=dedupe(allLegs.filter(p=>p.winPct>=60).sort((a,b)=>b.conf-a.conf)).slice(0,parlayLegs);
     
     // Strategy 2: BALANCED — mixed bet types across regions
-    const byRegion={};allLegs.forEach(p=>{if(!byRegion[p.region])byRegion[p.region]=[];byRegion[p.region].push(p);});
+    const byRegion={};allLegs.forEach(p=>{const r=p.region||"X";if(!byRegion[r])byRegion[r]=[];byRegion[r].push(p);});
     const perRegion=Math.ceil(parlayLegs/4);
     const balanced=dedupe(Object.values(byRegion).flatMap(rPreds=>{
-      const hi=rPreds.filter(p=>p.winPct>=70&&p.betType==="ml").slice(0,Math.ceil(perRegion*0.5));
-      const mid=rPreds.filter(p=>p.winPct>=55&&p.winPct<70).slice(0,Math.floor(perRegion*0.3));
-      const mix=rPreds.filter(p=>p.betType!=="ml").slice(0,1); // 1 spread/total per region
+      const hi=rPreds.filter(p=>p.winPct>=70).slice(0,Math.ceil(perRegion*0.4));
+      const mid=rPreds.filter(p=>p.winPct>=55&&p.winPct<70).slice(0,Math.ceil(perRegion*0.3));
+      const mix=rPreds.filter(p=>p.betType!=="ml").slice(0,Math.ceil(perRegion*0.3));
       return[...hi,...mid,...mix];
     })).slice(0,parlayLegs);
     
@@ -1232,7 +1235,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
     });
     const moonshot=dedupe(evSorted).slice(0,parlayLegs);
 
-    const hasAnyLive=allPreds.some(p=>p.hasLive);
+    const hasAnyLive=allLegs.some(p=>p.hasLive);
     const localParlays={
       locks:{name:"Locks Parlay",desc:`${parlayLegs} highest-confidence picks`,color:"var(--acc)",tag:"SAFE",legs:locks,payout:calcPayout(locks)},
       balanced:{name:"Balanced Parlay",desc:"Spread across all 4 regions",color:"var(--green)",tag:"SMART",legs:balanced,payout:calcPayout(balanced)},
@@ -2258,19 +2261,14 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
           {/* Sportsbook Filter */}
           <div style={{fontSize:12,fontWeight:700,color:"var(--m)",marginBottom:8,letterSpacing:0.3}}>SPORTSBOOK</div>
-          <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-            {(()=>{
-              // Collect all available book names from live odds
-              const books=new Set(["ALL"]);
-              if(liveOdds){Object.values(liveOdds).forEach(gd=>{Object.keys(gd.books||{}).forEach(b=>books.add(b));});}
-              return[...books].slice(0,8).map(bk=>(
-                <div key={bk} onClick={()=>setParlayBook(bk)} style={{padding:"8px 12px",borderRadius:8,cursor:"pointer",textAlign:"center",
-                  background:parlayBook===bk?"rgba(20,147,255,0.08)":"var(--s2)",
-                  border:parlayBook===bk?"1px solid var(--acc)":"1px solid var(--b)",transition:"all 0.15s",flex:"0 0 auto"}}>
-                  <div style={{fontSize:11,fontWeight:700,color:parlayBook===bk?"var(--acc)":"var(--m)",whiteSpace:"nowrap"}}>{bk==="ALL"?"Best Odds":bk}</div>
-                </div>
-              ));
-            })()}
+          <div style={{display:"flex",gap:6,marginBottom:16}}>
+            {["ALL","FanDuel","DraftKings"].map(bk=>(
+              <div key={bk} onClick={()=>setParlayBook(bk)} style={{flex:1,padding:"10px",borderRadius:8,cursor:"pointer",textAlign:"center",
+                background:parlayBook===bk?"rgba(20,147,255,0.08)":"var(--s2)",
+                border:parlayBook===bk?"1px solid var(--acc)":"1px solid var(--b)",transition:"all 0.15s"}}>
+                <div style={{fontSize:12,fontWeight:700,color:parlayBook===bk?"var(--acc)":"var(--m)"}}>{bk==="ALL"?"Best Line":bk}</div>
+              </div>
+            ))}
           </div>
 
           {/* Build button */}
@@ -2339,11 +2337,34 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                         {/* Pick info */}
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-                            <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{leg.winner}</span>
-                            <span style={{fontSize:10,color:"var(--d)"}}>{leg.seedW?"("+leg.seedW+")":""}</span>
-                            <span style={{fontSize:11,color:"var(--d)"}}>over</span>
-                            <span style={{fontSize:12,color:"var(--m)"}}>{leg.loser}</span>
-                            <span style={{fontSize:10,color:"var(--d)"}}>{leg.seedL?"("+leg.seedL+")":""}</span>
+                            {/* Bet type badge */}
+                            {leg.betType&&leg.betType!=="ml"&&(
+                              <span style={{fontSize:9,fontWeight:800,padding:"2px 5px",borderRadius:3,
+                                background:leg.betType==="spread"?"rgba(157,122,255,0.12)":"rgba(245,166,35,0.12)",
+                                color:leg.betType==="spread"?"#9d7aff":"var(--orange)",
+                                letterSpacing:0.3}}>{leg.betType==="spread"?"SPR":"O/U"}</span>
+                            )}
+                            {/* Spread display */}
+                            {leg.betType==="spread"?(
+                              <>
+                                <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{leg.winner}</span>
+                                <span className="mn" style={{fontSize:13,fontWeight:800,color:"#9d7aff"}}>{leg.spreadPoint>0?"+":""}{leg.spreadPoint}</span>
+                                <span style={{fontSize:11,color:"var(--d)"}}>vs {leg.loser}</span>
+                              </>
+                            ):leg.betType==="total"?(
+                              <>
+                                <span style={{fontSize:13,fontWeight:700,color:"var(--orange)"}}>{leg.totalSide} {leg.totalPoint}</span>
+                                <span style={{fontSize:11,color:"var(--d)"}}>{leg.gameA||leg.winner} vs {leg.gameB||leg.loser}</span>
+                              </>
+                            ):(
+                              <>
+                                <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{leg.winner}</span>
+                                <span style={{fontSize:10,color:"var(--d)"}}>{leg.seedW?"("+leg.seedW+")":""}</span>
+                                <span style={{fontSize:11,color:"var(--d)"}}>over</span>
+                                <span style={{fontSize:12,color:"var(--m)"}}>{leg.loser}</span>
+                                <span style={{fontSize:10,color:"var(--d)"}}>{leg.seedL?"("+leg.seedL+")":""}</span>
+                              </>
+                            )}
                           </div>
                           {/* Rationale */}
                           {(leg.aiRationale||leg.note)&&(
@@ -2352,7 +2373,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                           {/* Tags */}
                           {leg.tags?.length>0&&(
                             <div style={{display:"flex",gap:4,marginTop:3,flexWrap:"wrap"}}>
-                              {leg.tags.map((tag,ti)=>(
+                              {leg.tags.filter(t=>t!=="SPREAD"&&t!=="TOTAL").map((tag,ti)=>(
                                 <span key={ti} style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,
                                   background:tag.includes("EV")?"rgba(47,189,96,0.12)":tag==="INJURY EDGE"?"rgba(229,69,61,0.1)":tag==="HOT"?"rgba(245,166,35,0.1)":"rgba(255,255,255,0.04)",
                                   color:tag.includes("EV")?"var(--green)":tag==="INJURY EDGE"?"var(--red)":tag==="HOT"?"var(--orange)":"var(--m)",
