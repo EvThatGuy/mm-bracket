@@ -438,6 +438,14 @@ button:disabled{opacity:0.5;cursor:not-allowed!important}
 .btn-red:hover{box-shadow:0 4px 16px rgba(229,69,61,0.35)}
 .btn-outline{background:var(--s2)!important;color:#fff!important;border:1px solid var(--b2)!important;font-weight:600!important}
 .btn-outline:hover{background:var(--s3)!important;border-color:rgba(255,255,255,0.2)!important}
+@media(max-width:600px){
+  .wrap{padding:0 10px!important}
+  .gl{padding:12px!important}
+  .resp-grid3{grid-template-columns:1fr!important}
+  .resp-grid2{grid-template-columns:1fr!important}
+  .resp-flex{flex-wrap:wrap!important}
+  .resp-hide{display:none!important}
+}
 `;
 
 export default function App(){
@@ -456,6 +464,9 @@ export default function App(){
   const [results,setResults]=useState({});
   const [fetchLoading,setFetchLoading]=useState(false);
   const [fetchMsg,setFetchMsg]=useState("");
+  const [liveScores,setLiveScores]=useState(null);
+  const [autoPolling,setAutoPolling]=useState(false);
+  const [lastScoreFetch,setLastScoreFetch]=useState(null);
   const [trkRound,setTrkRound]=useState(0);
   const [nextRoundPreds,setNextRoundPreds]=useState(null);
   const [briefing,setBriefing]=useState(null);
@@ -469,6 +480,15 @@ export default function App(){
   const [modal,setModal]=useState(null);
   const [toast,setToast]=useState(null);
   const [bracketNotif,setBracketNotif]=useState(false);
+  const [liveOdds,setLiveOdds]=useState(null);
+  const [oddsLoading,setOddsLoading]=useState(false);
+  const [oddsUsage,setOddsUsage]=useState(null);
+  const [parlayLegs,setParlayLegs]=useState(8);
+  const [parlayType,setParlayType]=useState("auto");
+  const [parlayBetTypes,setParlayBetTypes]=useState({ml:true,spread:false,total:false});
+  const [oddsHistory,setOddsHistory]=useState([]);
+  const [parlays,setParlays]=useState(null);
+  const [parlayLoading,setParlayLoading]=useState(false);
 
   useEffect(()=>{
     (()=>{try{const v=localStorage.getItem("mm26-br");if(v)setBrackets(JSON.parse(v));}catch(e){}})();
@@ -478,6 +498,8 @@ export default function App(){
     (()=>{try{const v=localStorage.getItem("mm26-brief");if(v){const d=JSON.parse(v);if(Date.now()-d.ts<1800000)setBriefing(d);}}catch(e){}})();
     (()=>{try{const v=localStorage.getItem("mm26-margins");if(v)setMargins(JSON.parse(v));}catch(e){}})();
     (()=>{try{const v=localStorage.getItem("mm26-boosts");if(v)setBoosts(JSON.parse(v));}catch(e){}})();
+    (()=>{try{const v=localStorage.getItem("mm26-odds");if(v){const d=JSON.parse(v);if(Date.now()-d.ts<3600000){setLiveOdds(d.data);setOddsUsage(d.usage);}}}catch(e){}})();
+    (()=>{try{const v=localStorage.getItem("mm26-odds-hist");if(v)setOddsHistory(JSON.parse(v));}catch(e){}})();
   },[]);
 
   const saveResults=useCallback(async(r)=>{setResults(r);try{localStorage.setItem("mm26-res",JSON.stringify(r));}catch(e){}},[]);
@@ -662,6 +684,94 @@ Respond ONLY with JSON (no backticks):
   },[getGamesForRound]);
 
   // Web search powered update
+  // Fetch live scores from The Odds API (free, fast, no AI tokens)
+  const fetchLiveScores=useCallback(async(silent=false)=>{
+    if(!silent){setFetchLoading(true);setFetchMsg("Fetching live scores...");}
+    try{
+      const res=await fetch("/api/scores?sport=basketball_ncaab&daysFrom=3");
+      const data=await res.json();
+      if(data.scores&&Array.isArray(data.scores)){
+        setLiveScores(data.scores);
+        setLastScoreFetch(new Date());
+        if(data.usage)setOddsUsage(data.usage);
+        
+        // Fuzzy match team name to our database
+        const matchTeam=(name)=>{
+          if(!name)return null;
+          const lower=name.toLowerCase();
+          return Object.keys(T).find(t=>{
+            const tl=t.toLowerCase();
+            return lower===tl||lower.includes(tl)||tl.includes(lower)||
+              lower.includes(tl.split(" ")[0])||(tl.includes(".")&&lower.includes(tl.replace(".","")))||
+              (T[t].c&&lower.includes(T[t].c.toLowerCase()));
+          });
+        };
+        
+        // Auto-import completed games
+        let imported=0;
+        const nr={...results};
+        data.scores.forEach(game=>{
+          if(!game.completed)return;
+          const scores=game.scores;
+          if(!scores||scores.length<2)return;
+          // Determine winner
+          const s0=parseInt(scores[0]?.score)||0;
+          const s1=parseInt(scores[1]?.score)||0;
+          const winnerName=s0>s1?game.home_team:game.away_team;
+          const loserName=s0>s1?game.away_team:game.home_team;
+          const margin=Math.abs(s0-s1);
+          const winnerTeam=matchTeam(winnerName);
+          const loserTeam=matchTeam(loserName);
+          if(!winnerTeam||!loserTeam)return;
+          
+          // Find the matchup key in our bracket
+          Object.entries(MO).forEach(([rk,matchups])=>{
+            matchups.forEach(([a,b],mi)=>{
+              if((a===winnerTeam&&b===loserTeam)||(b===winnerTeam&&a===loserTeam)){
+                const key=`${rk}-0-${mi}`;
+                if(!nr[key]){
+                  nr[key]=winnerTeam;
+                  imported++;
+                  // Store margin
+                  const nm={...margins};
+                  if(!nm[key])nm[key]={wins:[]};
+                  nm[key].wins.push(margin);
+                  setMargins(nm);
+                  try{localStorage.setItem("mm26-margins",JSON.stringify(nm));}catch(e){}
+                }
+              }
+            });
+          });
+        });
+        
+        if(imported>0){
+          saveResults(nr);
+          // Recompute boosts
+          const newBoosts=computeBoosts(margins);
+          setBoosts(newBoosts);
+          try{localStorage.setItem("mm26-boosts",JSON.stringify(newBoosts));}catch(e){}
+          setFetchMsg(`${imported} new results imported. ${data.scores.filter(g=>!g.completed&&g.scores).length} games live.`);
+        }else{
+          const liveGames=data.scores.filter(g=>!g.completed&&g.scores&&g.scores.length>0);
+          const completedGames=data.scores.filter(g=>g.completed);
+          setFetchMsg(`${completedGames.length} completed, ${liveGames.length} live. No new results to import.`);
+        }
+      }else{
+        setFetchMsg("No score data available. Games may not have started.");
+      }
+    }catch(e){
+      setFetchMsg("Couldn't fetch scores. Check ODDS_API_KEY in Vercel settings.");
+    }
+    setFetchLoading(false);
+  },[results,margins,saveResults]);
+
+  // Auto-poll every 5 minutes when enabled
+  useEffect(()=>{
+    if(!autoPolling)return;
+    const interval=setInterval(()=>fetchLiveScores(true),300000); // 5 min
+    return()=>clearInterval(interval);
+  },[autoPolling,fetchLiveScores]);
+
   const fetchLatest=useCallback(async()=>{
     setFetchLoading(true);setFetchMsg("Searching for latest scores & injuries...");
     const roundNames=["First Round","Second Round","Sweet 16","Elite Eight","Final Four","Championship"];
@@ -730,6 +840,458 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
     setToast({msg,actionLabel,action,id:Date.now()});
     setTimeout(()=>setToast(null),5000);
   },[]);
+
+  // Export parlay as shareable image
+  const exportParlay=useCallback((parlay)=>{
+    const canvas=document.createElement("canvas");
+    const ctx=canvas.getContext("2d");
+    const w=600,legH=36,headerH=80,footerH=50,aiH=parlay.aiReasoning?50:0;
+    const legs=parlay.legs||[];
+    const h=headerH+aiH+(legs.length*legH)+footerH+20;
+    canvas.width=w*2;canvas.height=h*2;ctx.scale(2,2); // 2x for retina
+    
+    // Background
+    ctx.fillStyle="#0e1118";ctx.fillRect(0,0,w,h);
+    
+    // Accent bar
+    const colorMap={"var(--acc)":"#1493ff","var(--green)":"#2fbd60","var(--orange)":"#f5a623","var(--red)":"#e5453d"};
+    const accent=colorMap[parlay.color]||"#1493ff";
+    ctx.fillStyle=accent;ctx.fillRect(0,0,4,h);
+    
+    // Header
+    ctx.fillStyle="#ffffff";ctx.font="bold 18px 'DM Sans',sans-serif";
+    ctx.fillText(parlay.name||"Parlay",16,30);
+    ctx.fillStyle=accent;ctx.font="bold 12px 'IBM Plex Mono',monospace";
+    ctx.fillText(parlay.payout?.american||"",16,50);
+    ctx.fillStyle="rgba(255,255,255,0.4)";ctx.font="11px 'DM Sans',sans-serif";
+    ctx.fillText(`${legs.length} legs · Hit rate: ${parlay.payout?.hitRate||"?"}% · $10 → $${Math.round((parlay.payout?.payout||0)/10+10)}`,16,68);
+    
+    // Tag
+    ctx.fillStyle=accent+"30";
+    ctx.fillRect(w-80,12,70,24);
+    ctx.fillStyle=accent;ctx.font="bold 10px 'DM Sans',sans-serif";
+    ctx.fillText(parlay.tag||"",w-70,28);
+    
+    // AI reasoning
+    let y=headerH;
+    if(parlay.aiReasoning){
+      ctx.fillStyle="rgba(255,255,255,0.03)";ctx.fillRect(12,y,w-24,aiH-8);
+      ctx.fillStyle=accent;ctx.font="bold 9px 'DM Sans',sans-serif";
+      ctx.fillText("AI ANALYSIS",20,y+14);
+      ctx.fillStyle="rgba(255,255,255,0.6)";ctx.font="11px 'DM Sans',sans-serif";
+      const reason=parlay.aiReasoning.slice(0,90)+(parlay.aiReasoning.length>90?"...":"");
+      ctx.fillText(reason,20,y+30);
+      y+=aiH;
+    }
+    
+    // Legs
+    legs.forEach((leg,i)=>{
+      const ly=y+(i*legH);
+      // Separator
+      if(i>0){ctx.fillStyle="rgba(255,255,255,0.04)";ctx.fillRect(16,ly,w-32,1);}
+      // Number
+      ctx.fillStyle="rgba(255,255,255,0.2)";ctx.font="bold 11px 'IBM Plex Mono',monospace";
+      ctx.fillText(`${i+1}`,20,ly+22);
+      // Pick
+      ctx.fillStyle="#ffffff";ctx.font="bold 13px 'DM Sans',sans-serif";
+      const pickName=leg.winner||(leg.betLabel||"");
+      ctx.fillText(pickName,42,ly+16);
+      ctx.fillStyle="rgba(255,255,255,0.3)";ctx.font="11px 'DM Sans',sans-serif";
+      ctx.fillText(`over ${leg.loser||""}`,42,ly+30);
+      // Bet type badge
+      if(leg.betType&&leg.betType!=="ml"){
+        ctx.fillStyle=accent+"20";
+        const badge=leg.betType==="spread"?"SPR":"TOT";
+        ctx.fillRect(w-120,ly+6,28,16);
+        ctx.fillStyle=accent;ctx.font="bold 8px 'DM Sans',sans-serif";
+        ctx.fillText(badge,w-116,ly+17);
+      }
+      // Odds/confidence
+      const confColor=leg.winPct>=80?"#2fbd60":leg.winPct>=65?"#1493ff":leg.winPct>=50?"#f5a623":"#e5453d";
+      ctx.fillStyle=confColor;ctx.font="bold 14px 'IBM Plex Mono',monospace";
+      const odds=leg.liveOdds!==null?`${leg.liveOdds>0?"+":""}${leg.liveOdds}`:`${leg.winPct}%`;
+      ctx.fillText(odds,w-70,ly+20);
+    });
+    
+    // Footer
+    const fy=y+(legs.length*legH)+10;
+    ctx.fillStyle="rgba(255,255,255,0.03)";ctx.fillRect(0,fy,w,footerH);
+    ctx.fillStyle="rgba(255,255,255,0.25)";ctx.font="10px 'DM Sans',sans-serif";
+    ctx.fillText("Generated by March Madness Bracket Intelligence · "+new Date().toLocaleDateString(),16,fy+20);
+    ctx.fillText("Model-generated picks. Bet responsibly.",16,fy+36);
+    
+    // Download
+    const link=document.createElement("a");
+    link.download=`parlay-${(parlay.name||"picks").replace(/\s/g,"-").toLowerCase()}.png`;
+    link.href=canvas.toDataURL("image/png");
+    link.click();
+    showToast("Parlay image saved to downloads");
+  },[showToast]);
+
+  // Fetch live odds from The Odds API
+  const fetchLiveOdds=useCallback(async()=>{
+    setOddsLoading(true);
+    try{
+      const res=await fetch("/api/odds?sport=basketball_ncaab&markets=h2h,spreads,totals&regions=us");
+      const data=await res.json();
+      if(data.odds&&Array.isArray(data.odds)){
+        // Parse odds into a usable format
+        const parsed={};
+        data.odds.forEach(game=>{
+          const home=game.home_team;const away=game.away_team;
+          const bookmakers=game.bookmakers||[];
+          const gameData={home,away,commence:game.commence_time,books:{}};
+          bookmakers.forEach(bk=>{
+            const h2h=bk.markets?.find(m=>m.key==="h2h");
+            const spreads=bk.markets?.find(m=>m.key==="spreads");
+            const totals=bk.markets?.find(m=>m.key==="totals");
+            gameData.books[bk.title]={
+              h2h:h2h?.outcomes?.reduce((a,o)=>({...a,[o.name]:o.price}),{})||{},
+              spreads:spreads?.outcomes?.reduce((a,o)=>({...a,[o.name]:{price:o.price,point:o.point}}),{})||{},
+              totals:totals?.outcomes?.reduce((a,o)=>({...a,[o.name]:{price:o.price,point:o.point}}),{})||{},
+            };
+          });
+          // Match to our team database by fuzzy name matching
+          const matchTeam=(name)=>{
+            const lower=name.toLowerCase();
+            return Object.keys(T).find(t=>{
+              const tl=t.toLowerCase();
+              return lower.includes(tl)||tl.includes(lower)||
+                lower.includes(tl.split(" ")[0])||
+                (T[t].c&&lower.includes(T[t].c.toLowerCase()));
+            });
+          };
+          const homeMatch=matchTeam(home);const awayMatch=matchTeam(away);
+          if(homeMatch)parsed[homeMatch]=gameData;
+          if(awayMatch)parsed[awayMatch]=gameData;
+        });
+        setLiveOdds(parsed);
+        setOddsUsage(data.usage);
+        try{localStorage.setItem("mm26-odds",JSON.stringify({data:parsed,usage:data.usage,ts:Date.now()}));}catch(e){}
+        // Save snapshot for line movement tracking
+        const snapshot={ts:Date.now(),lines:{}};
+        Object.entries(parsed).forEach(([team,gd])=>{
+          const fb=Object.keys(gd.books)[0];if(!fb)return;
+          const bk=gd.books[fb];
+          const h2h=bk?.h2h||{};const spreads=bk?.spreads||{};
+          Object.entries(h2h).forEach(([name,price])=>{
+            const lower=name.toLowerCase();
+            const match=Object.keys(T).find(t=>lower.includes(t.toLowerCase())||lower.includes(t.toLowerCase().split(" ")[0]));
+            if(match)snapshot.lines[match]={ml:price,spread:Object.values(spreads)[0]?.point||null,book:fb};
+          });
+        });
+        const hist=[...oddsHistory,snapshot].slice(-20); // Keep last 20 snapshots
+        setOddsHistory(hist);
+        try{localStorage.setItem("mm26-odds-hist",JSON.stringify(hist));}catch(e){}
+        showToast(`Live odds loaded — ${data.odds.length} games from ${data.usage?.remaining||"?"} requests remaining`);
+      }
+    }catch(e){
+      showToast("Could not fetch live odds — check your API key in Vercel settings");
+    }
+    setOddsLoading(false);
+  },[showToast]);
+
+  // Historical upset rates by seed matchup (for calibration)
+  const SEED_UPSET_RATE={
+    "1v16":0.01,"2v15":0.06,"3v14":0.15,"4v13":0.21,"5v12":0.35,"6v11":0.37,"7v10":0.39,"8v9":0.49
+  };
+  const getSeedMatchup=(sA,sB)=>{const hi=Math.min(sA,sB),lo=Math.max(sA,sB);return `${hi}v${lo}`;};
+  
+  // Calibrate model probability with historical seed data
+  const calibrate=(modelProb,seedW,seedL)=>{
+    const key=getSeedMatchup(seedW,seedL);
+    const histRate=SEED_UPSET_RATE[key];
+    if(!histRate)return modelProb;
+    // If model says favorite wins, blend with historical rate
+    const isFav=seedW<seedL;
+    const histProb=isFav?(1-histRate):histRate;
+    return modelProb*0.65+histProb*0.35; // 65% model, 35% history
+  };
+
+  // Build parlays using prediction engine + live odds + AI
+  const buildParlays=useCallback(async()=>{
+    setParlayLoading(true);setParlays(null);
+    
+    // Auto-fetch live odds if we don't have them
+    let odds=liveOdds;
+    if(!odds){
+      try{
+        const res=await fetch("/api/odds?sport=basketball_ncaab&markets=h2h,spreads,totals&regions=us");
+        const data=await res.json();
+        if(data.odds&&Array.isArray(data.odds)){
+          const parsed={};
+          data.odds.forEach(game=>{
+            const bookmakers=game.bookmakers||[];
+            const gameData={home:game.home_team,away:game.away_team,commence:game.commence_time,books:{}};
+            bookmakers.forEach(bk=>{
+              const h2h=bk.markets?.find(m=>m.key==="h2h");
+              const spreads=bk.markets?.find(m=>m.key==="spreads");
+              gameData.books[bk.title]={
+                h2h:h2h?.outcomes?.reduce((a,o)=>({...a,[o.name]:o.price}),{})||{},
+                spreads:spreads?.outcomes?.reduce((a,o)=>({...a,[o.name]:{price:o.price,point:o.point}}),{})||{},
+              };
+            });
+            const matchTeam=(name)=>{
+              const lower=name.toLowerCase();
+              return Object.keys(T).find(t=>{
+                const tl=t.toLowerCase();
+                return lower.includes(tl)||tl.includes(lower)||lower.includes(tl.split(" ")[0]);
+              });
+            };
+            const hm=matchTeam(game.home_team);const am=matchTeam(game.away_team);
+            if(hm)parsed[hm]=gameData;
+            if(am)parsed[am]=gameData;
+          });
+          odds=parsed;setLiveOdds(parsed);
+          setOddsUsage(data.usage);
+          try{localStorage.setItem("mm26-odds",JSON.stringify({data:parsed,usage:data.usage,ts:Date.now()}));}catch(e){}
+        }
+      }catch(e){/* proceed without live odds */}
+    }
+
+    // Helper: convert American odds to implied probability
+    const americanToProb=(am)=>{if(!am||am===0)return null;return am>0?100/(am+100):Math.abs(am)/(Math.abs(am)+100);};
+    // Helper: find best moneyline for a team from live odds
+    const findLiveLine=(teamName)=>{
+      if(!odds)return null;
+      const gameData=odds[teamName];
+      if(!gameData)return null;
+      let bestOdds=null;let bestBook=null;
+      Object.entries(gameData.books).forEach(([bookName,bk])=>{
+        const h2h=bk.h2h||{};
+        // Find this team's line across book names (fuzzy match)
+        Object.entries(h2h).forEach(([name,price])=>{
+          const nl=name.toLowerCase(),tl=teamName.toLowerCase();
+          if(nl.includes(tl)||tl.includes(nl)||nl.includes(tl.split(" ")[0])){
+            if(bestOdds===null||price>bestOdds){bestOdds=price;bestBook=bookName;}
+          }
+        });
+      });
+      return bestOdds!==null?{american:bestOdds,implied:americanToProb(bestOdds),book:bestBook}:null;
+    };
+
+    // Gather all game predictions with live odds integration
+    const allPreds=Object.entries(MO).flatMap(([rk,matchups])=>
+      matchups.map(([a,b])=>{
+        const rawWP=getWP(a,b,boosts);const winner=rawWP>=0.5?a:b;const loser=rawWP>=0.5?b:a;
+        const rawConf=Math.max(rawWP,1-rawWP);
+        const calConf=calibrate(rawConf,T[winner].s,T[loser].s);
+        const ta=T[winner],tl=T[loser];
+        const clash=getStyleClash(winner,loser);
+        const injEdge=tl.inj?0.04:0;
+        const momEdge=(ta.mom-tl.mom)/200;
+        const clutchEdge=(ta.clutch-tl.clutch)/200;
+        const tempoEdge=clash?.tempoGap>12?-0.03:0;
+        const coachEdge=(ta.coach&&ta.exp>tl.exp)?0.02:0;
+        const totalEdge=injEdge+momEdge+clutchEdge+tempoEdge+coachEdge;
+        const finalConf=Math.min(0.97,Math.max(0.03,calConf+totalEdge));
+        
+        // Live odds integration
+        const live=findLiveLine(winner);
+        const liveLoser=findLiveLine(loser);
+        const vegasImpl=live?live.implied:null;
+        const ev=vegasImpl?(finalConf-vegasImpl):0;
+        const hasLive=!!live;
+        
+        // Get spread and total data
+        let spreadData=null,totalData=null;
+        if(odds){
+          const gd=odds[winner]||odds[loser];
+          if(gd){
+            const fb=Object.keys(gd.books)[0];
+            if(fb){
+              const bk=gd.books[fb];
+              const sp=bk?.spreads||{};const tot=bk?.totals||{};
+              // Find winner's spread
+              Object.entries(sp).forEach(([name,data])=>{
+                const nl=name.toLowerCase(),wl=winner.toLowerCase();
+                if(nl.includes(wl)||nl.includes(wl.split(" ")[0])){
+                  spreadData={point:data.point,price:data.price,book:fb};
+                }
+              });
+              // Get total
+              const overData=Object.entries(tot).find(([k])=>k.toLowerCase()==="over");
+              const underData=Object.entries(tot).find(([k])=>k.toLowerCase()==="under");
+              if(overData)totalData={over:{point:overData[1].point,price:overData[1].price},under:underData?{point:underData[1].point,price:underData[1].price}:null,book:fb};
+            }
+          }
+        }
+        
+        return{
+          winner,loser,conf:finalConf,rawConf,winPct:Math.round(finalConf*100),
+          betType:"ml",
+          region:rk,regionName:RG[rk],seedW:ta.s,seedL:tl.s,
+          style:ta.style,defStyle:ta.defStyle,
+          injury:tl.inj||"",injW:ta.inj||"",
+          momentum:ta.mom,clutch:ta.clutch,sos:ta.sos,
+          tempoGap:clash?.tempoGap||0,totalEdge,
+          note:ta.note?.slice(0,80)||"",
+          liveOdds:live?.american||null,liveBook:live?.book||null,
+          vegasImpl,ev,hasLive,loserOdds:liveLoser?.american||null,
+          spreadData,totalData,
+          tags:[
+            ev>0.05?"+"+(ev*100).toFixed(0)+"% EV":"",
+            tl.inj?"INJURY EDGE":"",
+            ta.mom>=80?"HOT":"",
+            ta.clutch>=80?"CLUTCH":"",
+            ta.s<=2?"TOP SEED":"",
+            clash?.tempoGap>12?"TEMPO CLASH":"",
+            ta.sos>=70?"BATTLE TESTED":"",
+          ].filter(Boolean)
+        };
+      })
+    ).sort((a,b)=>b.conf-a.conf);
+
+    // Generate spread and total legs from ML predictions
+    const spreadLegs=parlayBetTypes.spread?allPreds.filter(p=>p.spreadData).map(p=>({
+      ...p,betType:"spread",
+      betLabel:`${p.winner} ${p.spreadData.point>0?"+":""}${p.spreadData.point}`,
+      liveOdds:p.spreadData.price,liveBook:p.spreadData.book,
+      // Favorites covering is slightly less likely than winning outright
+      conf:p.spreadData.point<0?Math.max(0.3,p.conf-0.08):Math.min(0.95,p.conf+0.05),
+      winPct:p.spreadData.point<0?Math.max(30,p.winPct-8):Math.min(95,p.winPct+5),
+      tags:[...p.tags,"SPREAD"]
+    })):[];
+
+    const totalLegs=parlayBetTypes.total?allPreds.filter(p=>p.totalData).map(p=>{
+      // Use tempo to predict over/under: fast teams = over, slow = over
+      const avgTempo=(T[p.winner]?.tempo||65)+(T[p.loser]?.tempo||65);
+      const isOver=avgTempo>130;
+      return{
+        ...p,betType:"total",
+        betLabel:`${isOver?"Over":"Under"} ${p.totalData.over?.point||0}`,
+        winner:isOver?"Over":"Under",loser:isOver?"Under":"Over",
+        liveOdds:isOver?p.totalData.over?.price:p.totalData.under?.price,
+        liveBook:p.totalData.book,
+        conf:0.55, // totals are harder to predict
+        winPct:55,
+        tags:["TOTAL",avgTempo>140?"FAST PACE":"SLOW PACE"]
+      };
+    }):[];
+
+    // Combine all available legs
+    const allLegs=[...allPreds,...spreadLegs,...totalLegs];
+
+    // Calculate combined payout using REAL odds when available, model odds as fallback
+    const calcPayout=(legs)=>{
+      let combined=1;
+      let allLive=true;
+      legs.forEach(l=>{
+        if(l.liveOdds!==null){
+          // Use real sportsbook decimal odds
+          const am=l.liveOdds;
+          const decimal=am>0?(1+am/100):(1+100/Math.abs(am));
+          combined*=decimal;
+        }else{
+          allLive=false;
+          // Fallback: model probability with juice
+          const juicedProb=Math.min(0.95,l.conf*1.05);
+          combined*=(1/juicedProb);
+        }
+      });
+      const hitRate=legs.reduce((a,l)=>a*l.conf,1)*100;
+      const american=combined>=2?`+${Math.round((combined-1)*100)}`:`${Math.round(-100/(combined-1))}`;
+      const liveCount=legs.filter(l=>l.liveOdds!==null).length;
+      return{decimal:combined,american,payout:Math.round((combined-1)*100),hitRate:hitRate.toFixed(3),liveCount,totalLegs:legs.length,allLive};
+    };
+
+    const dedupe=(legs)=>{
+      const seen=new Set();
+      return legs.filter(l=>{
+        const game=`${l.winner}-${l.loser}`;const gameR=`${l.loser}-${l.winner}`;
+        if(seen.has(game)||seen.has(gameR))return false;
+        seen.add(game);return true;
+      });
+    };
+
+    // Strategy 1: LOCKS — top confidence (ML primary, mix in spreads if enabled)
+    const mlLocks=dedupe(allPreds.filter(p=>p.winPct>=65));
+    const spreadLocks=dedupe(spreadLegs.filter(p=>p.winPct>=55));
+    const lockPool=parlayBetTypes.spread?[...mlLocks.slice(0,Math.ceil(parlayLegs*0.7)),...spreadLocks.slice(0,Math.floor(parlayLegs*0.3))]:mlLocks;
+    const locks=lockPool.slice(0,parlayLegs);
+    
+    // Strategy 2: BALANCED — mixed bet types across regions
+    const byRegion={};allLegs.forEach(p=>{if(!byRegion[p.region])byRegion[p.region]=[];byRegion[p.region].push(p);});
+    const perRegion=Math.ceil(parlayLegs/4);
+    const balanced=dedupe(Object.values(byRegion).flatMap(rPreds=>{
+      const hi=rPreds.filter(p=>p.winPct>=70&&p.betType==="ml").slice(0,Math.ceil(perRegion*0.5));
+      const mid=rPreds.filter(p=>p.winPct>=55&&p.winPct<70).slice(0,Math.floor(perRegion*0.3));
+      const mix=rPreds.filter(p=>p.betType!=="ml").slice(0,1); // 1 spread/total per region
+      return[...hi,...mid,...mix];
+    })).slice(0,parlayLegs);
+    
+    // Strategy 3: +EV PARLAY — prioritize positive expected value legs across all bet types
+    const evSorted=[...allLegs].filter(p=>p.winPct>=40).sort((a,b)=>{
+      // Primary sort: +EV legs first (model beats Vegas)
+      const evA=a.ev||0,evB=b.ev||0;
+      if(evA>0.03&&evB<=0.03)return -1;
+      if(evB>0.03&&evA<=0.03)return 1;
+      // Secondary: total edge score
+      return(b.totalEdge+evB)-(a.totalEdge+evA);
+    });
+    const moonshot=dedupe(evSorted).slice(0,parlayLegs);
+
+    const hasAnyLive=allPreds.some(p=>p.hasLive);
+    const localParlays={
+      locks:{name:"Locks Parlay",desc:`${parlayLegs} highest-confidence picks`,color:"var(--acc)",tag:"SAFE",legs:locks,payout:calcPayout(locks)},
+      balanced:{name:"Balanced Parlay",desc:"Spread across all 4 regions",color:"var(--green)",tag:"SMART",legs:balanced,payout:calcPayout(balanced)},
+      moonshot:{name:hasAnyLive?"+EV Parlay":"Edge Parlay",desc:hasAnyLive?"Model beats Vegas on these lines":"Best edge scores from analytics",color:"var(--orange)",tag:hasAnyLive?"+EV":"EDGE",legs:moonshot,payout:calcPayout(moonshot)},
+    };
+
+    // AI mode
+    if(parlayType==="auto"){
+      const gameData=allPreds.slice(0,24).map(p=>{
+        let line=`${p.winner}(${p.seedW}) over ${p.loser}(${p.seedL}): ${p.winPct}%conf, ${p.regionName}, edge:${(p.totalEdge*100).toFixed(1)}%`;
+        if(p.hasLive)line+=`, LIVE:${p.liveOdds>0?"+":""}${p.liveOdds}@${p.liveBook}, EV:${(p.ev*100).toFixed(1)}%`;
+        if(p.tags.length>0)line+=`, [${p.tags.join(",")}]`;
+        return line;
+      }).join("\n");
+      
+      const prompt=`You are an elite sports betting analyst. Build NCAA tournament parlays using calibrated predictions + live sportsbook odds.
+
+${gameData}
+
+KEY: "EV" = model probability minus Vegas implied probability. Positive EV means the model thinks the team is MORE likely to win than Vegas does — these are VALUE bets.
+
+Build three ${parlayLegs}-leg parlays:
+1. LOCKS: Highest confidence, safest to hit
+2. BALANCED: Mix of confidence levels spread across regions  
+3. +EV VALUE: PRIORITIZE legs with positive EV — where our model disagrees with Vegas. These are the highest-value bets even if confidence is lower.
+
+Rules:
+- Never both sides of same game
+- Spread across regions
+- For +EV parlay, at least half the legs should have positive EV
+- Each leg needs a 1-sentence rationale mentioning the edge
+
+JSON only, no markdown:
+{"locks":{"reasoning":"Why safe","legs":[{"pick":"Team","over":"Opponent","conf":85,"rationale":"reason"}]},"balanced":{"reasoning":"Strategy","legs":[{"pick":"Team","over":"Opponent","conf":70,"rationale":"reason"}]},"moonshot":{"reasoning":"EV strategy","legs":[{"pick":"Team","over":"Opponent","conf":55,"rationale":"reason"}]}}
+EXACTLY ${parlayLegs} legs per parlay.`;
+
+      try{
+        const res=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2500,messages:[{role:"user",content:prompt}]})});
+        const d=await res.json();
+        const txt=d.content?.filter(b=>b.type==="text").map(b=>b.text).join("")||"";
+        const clean=txt.replace(/```json|```/g,"").replace(/<[^>]+>/g,"").trim();
+        const aiData=JSON.parse(clean);
+        
+        ["locks","balanced","moonshot"].forEach(key=>{
+          if(aiData[key]?.legs){
+            localParlays[key].aiReasoning=aiData[key].reasoning;
+            localParlays[key].legs=aiData[key].legs.map(l=>{
+              const pred=allPreds.find(p=>p.winner===l.pick);
+              return pred?{...pred,aiRationale:l.rationale}:{winner:l.pick,loser:l.over,conf:l.conf/100,winPct:l.conf,aiRationale:l.rationale,region:"",tags:[],liveOdds:null,ev:0};
+            });
+            localParlays[key].payout=calcPayout(localParlays[key].legs);
+          }
+        });
+      }catch(e){/* fallback to local */}
+    }
+    
+    setParlays(localParlays);
+    setParlayLoading(false);
+  },[parlayLegs,parlayType,boosts,liveOdds]);
   const pick=useCallback((key,team)=>{
     const nb=[...brackets];const p={...nb[bIdx].picks,[key]:team};
     // Clear downstream
@@ -781,7 +1343,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
     }).filter(v=>v.vegasPct>0).sort((a,b)=>b.edge-a.edge);
   },[simR]);
 
-  const TABS=[{id:"brief",l:"BRIEFING"},{id:"predict",l:"PICKS"},{id:"sim",l:"SIMULATE"},{id:"bracket",l:"BRACKET"},{id:"autogen",l:"AUTO-GEN"},{id:"value",l:"VALUE"},{id:"clash",l:"MATCHUPS"},{id:"players",l:"PLAYERS"},{id:"conf",l:"CONF"},{id:"tracker",l:"TRACKER"}];
+  const TABS=[{id:"brief",l:"BRIEFING"},{id:"predict",l:"PICKS"},{id:"parlay",l:"PARLAY"},{id:"sim",l:"SIMULATE"},{id:"bracket",l:"BRACKET"},{id:"autogen",l:"AUTO-GEN"},{id:"value",l:"VALUE"},{id:"clash",l:"MATCHUPS"},{id:"players",l:"PLAYERS"},{id:"conf",l:"CONF"},{id:"tracker",l:"TRACKER"}];
 
   return(
     <div style={{background:"var(--bg)",minHeight:"100vh",fontFamily:"'DM Sans',sans-serif",color:"var(--t)"}}>
@@ -863,7 +1425,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             {/* Key News */}
             {briefing.key_news&&briefing.key_news.length>0&&(
               <div className="gl fu" style={{padding:18,marginBottom:18}}>
-                <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:20}}>Key Updates</div>
+                <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:10}}>Key Updates</div>
                 {briefing.key_news.map((item,i)=>(
                   <div key={i} style={{display:"flex",gap:12,padding:"6px 0",borderBottom:i<briefing.key_news.length-1?"1px solid var(--b)":"none"}}>
                     <div style={{width:28,height:28,borderRadius:6,background:"var(--s2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
@@ -877,9 +1439,9 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
             {/* Bracket Health */}
             <div className="gl fu" style={{padding:18,marginBottom:18}}>
-              <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:20}}>Bracket Analysis</div>
+              <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:10}}>Bracket Analysis</div>
               <div style={{fontSize:14,color:"var(--t2)",lineHeight:1.6,marginBottom:18}}>{briefing.bracket_analysis}</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}} className="resp-grid3">
                 {brackets.map((b,i)=>{
                   let cor=0,wrg=0,pts=0;const rp={0:10,1:20,2:40,3:80,4:160,5:320};
                   Object.entries(b.picks).forEach(([k,pk])=>{const rd=parseInt(k.split("-")[1]);if(results[k]){if(results[k]===pk){cor++;pts+=(rp[rd]||10);}else wrg++;}});
@@ -898,7 +1460,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             {/* Danger Alerts */}
             {briefing.danger_alerts&&briefing.danger_alerts.length>0&&(
               <div className="gl fu" style={{padding:18,marginBottom:18,borderLeft:"3px solid var(--red)"}}>
-                <div style={{fontSize:15,fontWeight:700,color:"var(--red)",marginBottom:20}}>Danger Alerts</div>
+                <div style={{fontSize:15,fontWeight:700,color:"var(--red)",marginBottom:10}}>Danger Alerts</div>
                 {briefing.danger_alerts.map((alert,i)=>(
                   <div key={i} style={{fontSize:14,color:"var(--t2)",lineHeight:1.5,padding:"4px 0",borderBottom:i<briefing.danger_alerts.length-1?"1px solid var(--b)":"none"}}>{alert}</div>
                 ))}
@@ -908,7 +1470,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             {/* Today's Games */}
             {briefing.todays_games&&briefing.todays_games.length>0&&(
               <div className="gl fu" style={{padding:18,marginBottom:18}}>
-                <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:20}}>Today's Games</div>
+                <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:10}}>Today's Games</div>
                 {briefing.todays_games.map((game,i)=>(
                   <div key={i} style={{fontSize:14,color:"var(--t2)",lineHeight:1.5,padding:"5px 0",borderBottom:i<briefing.todays_games.length-1?"1px solid var(--b)":"none"}}>{game}</div>
                 ))}
@@ -918,7 +1480,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             {/* Today's Games */}
             {briefing.todays_games&&briefing.todays_games.length>0&&(
               <div className="gl fu" style={{padding:18,marginBottom:18}}>
-                <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:20}}>Today's Games</div>
+                <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:10}}>Today's Games</div>
                 {briefing.todays_games.map((game,i)=>(
                   <div key={i} style={{fontSize:14,color:"var(--t2)",lineHeight:1.5,padding:"5px 0",borderBottom:i<briefing.todays_games.length-1?"1px solid var(--b)":"none"}}>{game}</div>
                 ))}
@@ -928,7 +1490,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             {/* Performance Flags — from AI */}
             {briefing.performance_flags&&briefing.performance_flags.length>0&&(
               <div className="gl fu" style={{padding:18,marginBottom:18,borderLeft:"3px solid var(--green)"}}>
-                <div style={{fontSize:15,fontWeight:700,color:"var(--green)",marginBottom:20}}>Performance Tracker</div>
+                <div style={{fontSize:15,fontWeight:700,color:"var(--green)",marginBottom:10}}>Performance Tracker</div>
                 {briefing.performance_flags.map((flag,i)=>(
                   <div key={i} style={{fontSize:14,color:"var(--t2)",lineHeight:1.5,padding:"5px 0",borderBottom:i<briefing.performance_flags.length-1?"1px solid var(--b)":"none"}}>{flag}</div>
                 ))}
@@ -938,7 +1500,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             {/* Live Odds Shifts — from AI + local data */}
             {(briefing.odds_movement&&briefing.odds_movement.length>0||oddsShifts.length>0)&&(
               <div className="gl fu" style={{padding:18,marginBottom:18}}>
-                <div style={{fontSize:15,fontWeight:700,color:"var(--acc)",marginBottom:20}}>Title Odds Movement</div>
+                <div style={{fontSize:15,fontWeight:700,color:"var(--acc)",marginBottom:10}}>Title Odds Movement</div>
                 {/* Local computed shifts */}
                 {oddsShifts.length>0&&(
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:briefing.odds_movement?.length>0?8:0}}>
@@ -1059,9 +1621,9 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               return(
                 <div key={i} className="gl" style={{padding:16,marginBottom:12,borderLeft:`3px solid ${pred.confColor}`}}>
                   {/* Matchup header */}
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12,gap:12,flexWrap:"wrap"}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
+                      <div style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:4,flexWrap:"wrap"}}>
                         <span style={{fontSize:13,fontWeight:800,color:RC[rk]}}>({T[a].s})</span>
                         <span style={{fontSize:15,fontWeight:pred.winner===a?900:500,color:pred.winner===a?"#fff":"var(--m)"}}>{a}</span>
                         <span style={{fontSize:13,color:"var(--d)"}}>vs</span>
@@ -1113,7 +1675,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
         {/* Summary stats */}
         <div className="gl" style={{padding:16,marginTop:8}}>
           <div style={{fontSize:14,fontWeight:700,color:"var(--m)",letterSpacing:1,textTransform:"uppercase",marginBottom:20}}>Prediction Summary</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:6}}>
             {["LOCK","STRONG","LEAN","TOSS-UP"].map(c=>{
               const color=c==="LOCK"?"var(--green)":c==="STRONG"?"var(--acc)":c==="LEAN"?"var(--orange)":"var(--red)";
               const count=Object.entries(MO).flatMap(([rk,ms])=>ms.map(([a,b])=>getGamePrediction(a,b))).filter(p=>p?.conf===c).length;
@@ -1190,7 +1752,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
           const champs=Object.entries(RG).map(([rk,rn])=>{const k=`${rk}-3-0`;return{reg:rn,team:b.picks[k]||null,color:RC[rk]};});
           return(
             <div key={bi} className="gl" style={{padding:16,marginBottom:16}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8,flexWrap:"wrap"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                   <span style={{fontSize:15,fontWeight:800}}>{b.name}</span>
                   {score&&<span style={{fontSize:11,fontWeight:700,color:score.color,padding:"3px 8px",borderRadius:5,background:`${score.color}12`,whiteSpace:"nowrap"}}>{score.profile}</span>}
@@ -1447,45 +2009,391 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
       {/* ═══ BETTING VALUE TAB ═══ */}
       {tab==="value"&&(<div>
-        {!simR?(
-          <div className="gl fu" style={{padding:20,textAlign:"center"}}>
-            <p style={{fontSize:14,fontWeight:700,marginBottom:16}}>Run a simulation first to generate betting values</p>
-            <button onClick={()=>{doSim(10000);}} className="btn-primary" style={{padding:"14px 32px",borderRadius:8,fontSize:15,fontFamily:"'DM Sans'",cursor:"pointer"}}>Run 10k Sims</button>
+        {/* Live Odds Header */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+          <div>
+            <div style={{fontSize:18,fontWeight:800,color:"#fff",letterSpacing:-0.3}}>Betting Value Finder</div>
+            <div style={{fontSize:13,color:"var(--m)",marginTop:3}}>Model probability vs live sportsbook odds</div>
           </div>
-        ):(
-          <>
-            <div className="gl fu" style={{padding:18,marginBottom:20}}>
-              <div style={{fontSize:14,fontWeight:700,color:"#fff",marginBottom:4}}>Betting Value Finder</div>
-              <div style={{fontSize:13,color:"var(--m)",marginBottom:18,lineHeight:1.5}}>
-                Compares our model's implied win probability vs Vegas lines. Positive edge = the model thinks the team is more likely to win than Vegas does. These are your best value plays.
-              </div>
-              <div style={{display:"flex",padding:"6px 0",borderBottom:"1px solid var(--b)",marginBottom:4}}>
-                <span style={{flex:2,fontSize:15,fontWeight:700,color:"var(--d)"}}>TEAM</span>
-                <span style={{width:45,fontSize:15,fontWeight:700,color:"var(--d)",textAlign:"center"}}>VEGAS</span>
-                <span style={{width:45,fontSize:15,fontWeight:700,color:"var(--d)",textAlign:"center"}}>MODEL</span>
-                <span style={{width:45,fontSize:15,fontWeight:700,color:"var(--d)",textAlign:"center"}}>EDGE</span>
-              </div>
-              {bettingValues.map((v,i)=>(
-                <div key={v.name} style={{display:"flex",alignItems:"center",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
-                  <div style={{flex:2,display:"flex",alignItems:"center",gap:5}}>
-                    <div style={{width:22,height:22,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,background:RC[v.reg],color:"#000"}}>{v.seed}</div>
-                    <div><div style={{fontSize:13,fontWeight:700}}>{v.name}</div><div style={{fontSize:13,color:"var(--m)"}}>{v.conf} · {v.vegasOdds}</div></div>
+          <button className={oddsLoading?"btn-outline":"btn-green"} onClick={fetchLiveOdds} disabled={oddsLoading} style={{padding:"8px 16px",borderRadius:8,fontSize:12,fontFamily:"'DM Sans'",cursor:"pointer",whiteSpace:"nowrap"}}>
+            {oddsLoading?"Loading...":"Fetch Live Odds"}
+          </button>
+        </div>
+
+        {/* API Usage */}
+        {oddsUsage&&(
+          <div style={{display:"flex",gap:12,marginBottom:14,fontSize:12,color:"var(--m)"}}>
+            <span>Requests used: <span className="mn" style={{color:"#fff"}}>{oddsUsage.used}</span></span>
+            <span>Remaining: <span className="mn" style={{color:oddsUsage.remaining>400?"var(--green)":oddsUsage.remaining>100?"var(--orange)":"var(--red)"}}>{oddsUsage.remaining}</span>/500</span>
+          </div>
+        )}
+
+        {/* Sim required notice */}
+        {!simR&&(
+          <div className="gl fu" style={{padding:18,textAlign:"center",marginBottom:16}}>
+            <p style={{fontSize:14,fontWeight:700,marginBottom:14}}>Run a simulation to compare model vs Vegas</p>
+            <button onClick={()=>{doSim(10000);}} className="btn-primary" style={{padding:"12px 28px",borderRadius:8,fontSize:14,fontFamily:"'DM Sans'",cursor:"pointer"}}>Run 10k Sims</button>
+          </div>
+        )}
+
+        {/* Live Game Odds */}
+        {liveOdds&&Object.keys(liveOdds).length>0&&(
+          <div className="gl fu" style={{padding:16,marginBottom:16}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#fff",marginBottom:12}}>Live Game Lines</div>
+            {Object.entries(MO).flatMap(([rk,matchups])=>
+              matchups.map(([a,b],mi)=>{
+                const oddsA=liveOdds[a];const oddsB=liveOdds[b];
+                const odds=oddsA||oddsB;
+                if(!odds)return null;
+                const firstBook=Object.keys(odds.books)[0];
+                const bookData=firstBook?odds.books[firstBook]:null;
+                const h2h=bookData?.h2h||{};
+                const spread=bookData?.spreads||{};
+                const total=bookData?.totals||{};
+                const wp=getWP(a,b);
+                return(
+                  <div key={`${rk}-${mi}`} style={{padding:"10px 0",borderBottom:"1px solid var(--b)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:3,height:14,borderRadius:1,background:RC[rk]}}/>
+                        <span style={{fontSize:13,fontWeight:700}}>({T[a].s}) {a} vs ({T[b].s}) {b}</span>
+                      </div>
+                      <span style={{fontSize:11,color:"var(--m)"}}>{firstBook||""}</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}} className="resp-grid3">
+                      <div style={{padding:"6px 8px",borderRadius:6,background:"var(--s2)",textAlign:"center"}}>
+                        <div style={{fontSize:10,color:"var(--m)",marginBottom:2}}>MONEYLINE</div>
+                        <div style={{display:"flex",justifyContent:"space-around"}}>
+                          {Object.entries(h2h).slice(0,2).map(([team,price],i)=>(
+                            <div key={i}>
+                              <div style={{fontSize:10,color:"var(--m)"}}>{team.length>10?team.slice(0,9)+"…":team}</div>
+                              <div className="mn" style={{fontSize:13,fontWeight:700,color:price<0?"var(--green)":"#fff"}}>{price>0?"+":""}{price}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{padding:"6px 8px",borderRadius:6,background:"var(--s2)",textAlign:"center"}}>
+                        <div style={{fontSize:10,color:"var(--m)",marginBottom:2}}>SPREAD</div>
+                        <div style={{display:"flex",justifyContent:"space-around"}}>
+                          {Object.entries(spread).slice(0,2).map(([team,data],i)=>(
+                            <div key={i}>
+                              <div className="mn" style={{fontSize:13,fontWeight:700,color:"#fff"}}>{data.point>0?"+":""}{data.point}</div>
+                              <div style={{fontSize:10,color:"var(--m)"}}>{data.price>0?"+":""}{data.price}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{padding:"6px 8px",borderRadius:6,background:"var(--s2)",textAlign:"center"}}>
+                        <div style={{fontSize:10,color:"var(--m)",marginBottom:2}}>TOTAL</div>
+                        <div style={{display:"flex",justifyContent:"space-around"}}>
+                          {Object.entries(total).slice(0,2).map(([label,data],i)=>(
+                            <div key={i}>
+                              <div style={{fontSize:10,color:"var(--m)"}}>{label}</div>
+                              <div className="mn" style={{fontSize:13,fontWeight:700,color:"#fff"}}>{data.point}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",marginTop:6,padding:"4px 8px",borderRadius:4,background:"rgba(255,255,255,0.02)"}}>
+                      <span style={{fontSize:11,color:"var(--m)"}}>Model: <span className="mn" style={{color:"var(--acc)"}}>{a} {Math.round(wp*100)}%</span> — <span className="mn" style={{color:"var(--acc)"}}>{b} {Math.round((1-wp)*100)}%</span></span>
+                    </div>
                   </div>
-                  <span className="mn" style={{width:45,textAlign:"center",fontSize:13,color:"var(--m)"}}>{v.vegasPct.toFixed(1)}%</span>
-                  <span className="mn" style={{width:45,textAlign:"center",fontSize:13,color:"#fff"}}>{v.modelPct.toFixed(1)}%</span>
-                  <span className="mn" style={{width:45,textAlign:"center",fontSize:15,fontWeight:800,color:v.edge>2?"var(--green)":v.edge>0?"var(--orange)":"var(--red)"}}>
-                    {v.edge>0?"+":""}{v.edge.toFixed(1)}%
-                  </span>
+                );
+              })
+            ).filter(Boolean).slice(0,16)}
+            {Object.keys(liveOdds).length===0&&<div style={{fontSize:13,color:"var(--m)",textAlign:"center",padding:12}}>No live odds available. Games may not have started yet.</div>}
+          </div>
+        )}
+
+        {/* Model vs Vegas Title Odds */}
+        {simR&&(
+          <div className="gl fu" style={{padding:16,marginBottom:16}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#fff",marginBottom:4}}>Championship Value</div>
+            <div style={{fontSize:12,color:"var(--m)",marginBottom:14}}>
+              Model championship probability vs pre-tournament Vegas lines. Positive edge = undervalued by Vegas.
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"2.5fr 1fr 1fr 1fr",gap:4,padding:"8px 0",borderBottom:"1px solid var(--b)"}}>
+              <span style={{fontSize:11,fontWeight:700,color:"var(--d)"}}>TEAM</span>
+              <span style={{fontSize:11,fontWeight:700,color:"var(--d)",textAlign:"center"}}>VEGAS</span>
+              <span style={{fontSize:11,fontWeight:700,color:"var(--d)",textAlign:"center"}}>MODEL</span>
+              <span style={{fontSize:11,fontWeight:700,color:"var(--d)",textAlign:"center"}}>EDGE</span>
+            </div>
+            {bettingValues.map((v,i)=>(
+              <div key={v.name} style={{display:"grid",gridTemplateColumns:"2.5fr 1fr 1fr 1fr",gap:4,alignItems:"center",padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{width:22,height:22,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,background:RC[v.reg],color:"#000"}}>{v.seed}</div>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700}}>{v.name}</div>
+                    <div style={{fontSize:11,color:"var(--m)"}}>{v.vegasOdds}</div>
+                  </div>
+                </div>
+                <span className="mn" style={{textAlign:"center",fontSize:13,color:"var(--m)"}}>{v.vegasPct.toFixed(1)}%</span>
+                <span className="mn" style={{textAlign:"center",fontSize:13,color:"#fff"}}>{v.modelPct.toFixed(1)}%</span>
+                <span className="mn" style={{textAlign:"center",fontSize:13,fontWeight:800,color:v.edge>2?"var(--green)":v.edge>0?"var(--orange)":"var(--red)"}}>
+                  {v.edge>0?"+":""}{v.edge.toFixed(1)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Line Movement Tracker */}
+        {oddsHistory.length>=2&&(
+          <div className="gl fu" style={{padding:16,marginBottom:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{fontSize:14,fontWeight:700,color:"#fff"}}>Line Movement</div>
+              <span style={{fontSize:11,color:"var(--d)"}}>{oddsHistory.length} snapshots</span>
+            </div>
+            <div style={{fontSize:11,color:"var(--m)",marginBottom:10}}>
+              Compares your first odds fetch to the latest. Shows which lines are shifting and which direction sharp money is moving.
+            </div>
+            {(()=>{
+              const first=oddsHistory[0]?.lines||{};
+              const latest=oddsHistory[oddsHistory.length-1]?.lines||{};
+              const movements=Object.keys(latest).map(team=>{
+                const now=latest[team]?.ml;const then=first[team]?.ml;
+                if(!now||!then||now===then)return null;
+                const nowSpread=latest[team]?.spread;const thenSpread=first[team]?.spread;
+                const mlShift=now-then;
+                const spreadShift=nowSpread&&thenSpread?(nowSpread-thenSpread):null;
+                const t=T[team];if(!t)return null;
+                return{team,seed:t.s,region:t.r,openML:then,currentML:now,mlShift,openSpread:thenSpread,currentSpread:nowSpread,spreadShift,book:latest[team]?.book};
+              }).filter(Boolean).sort((a,b)=>Math.abs(b.mlShift)-Math.abs(a.mlShift));
+              
+              if(movements.length===0)return <div style={{fontSize:12,color:"var(--d)",textAlign:"center",padding:8}}>No significant line movement detected yet. Fetch odds again later to compare.</div>;
+              
+              return movements.slice(0,12).map((m,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<movements.slice(0,12).length-1?"1px solid rgba(255,255,255,0.03)":"none"}}>
+                  <div style={{width:4,height:20,borderRadius:2,background:RC[m.region],flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>({m.seed}) {m.team}</span>
+                      <span style={{fontSize:10,color:"var(--d)"}}>{m.book}</span>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:12,flexShrink:0,alignItems:"center"}}>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontSize:10,color:"var(--d)"}}>Open</div>
+                      <div className="mn" style={{fontSize:12,color:"var(--m)"}}>{m.openML>0?"+":""}{m.openML}</div>
+                    </div>
+                    <div style={{fontSize:14,color:m.mlShift<0?"var(--green)":"var(--red)",fontWeight:800}}>→</div>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontSize:10,color:"var(--d)"}}>Now</div>
+                      <div className="mn" style={{fontSize:12,color:"#fff"}}>{m.currentML>0?"+":""}{m.currentML}</div>
+                    </div>
+                    <div style={{padding:"2px 6px",borderRadius:4,fontSize:11,fontWeight:700,
+                      background:m.mlShift<0?"rgba(47,189,96,0.1)":"rgba(229,69,61,0.1)",
+                      color:m.mlShift<0?"var(--green)":"var(--red)"}}>
+                      {m.mlShift>0?"+":""}{m.mlShift}
+                    </div>
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+        )}
+
+        {/* How to read */}
+        <div className="gl" style={{padding:14}}>
+          <div style={{fontSize:13,fontWeight:700,color:"var(--t2)",marginBottom:6}}>How to use this</div>
+          <div style={{fontSize:13,color:"var(--m)",lineHeight:1.6}}>
+            Live Game Lines show real-time moneyline, spread, and totals from US sportsbooks. Championship Value compares our model against pre-tournament futures odds. A positive edge means the team is undervalued — look for 2%+ edges with strong analytics backing.
+          </div>
+        </div>
+      </div>)}
+
+      {/* ═══ AI PARLAY BUILDER TAB ═══ */}
+      {tab==="parlay"&&(<div>
+        {/* Header */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:18,fontWeight:800,color:"#fff",letterSpacing:-0.3}}>AI Parlay Builder</div>
+          <div style={{fontSize:12,color:"var(--m)",marginTop:3,lineHeight:1.5}}>
+            Calibrated with historical seed upset rates, injury edges, momentum, clutch, and style clashes. Picks are deduped across games and spread across regions.
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="gl" style={{padding:16,marginBottom:14}}>
+          {/* Leg count */}
+          <div style={{fontSize:12,fontWeight:700,color:"var(--m)",marginBottom:8,letterSpacing:0.3}}>LEGS</div>
+          <div style={{display:"flex",gap:6,marginBottom:14}}>
+            {[6,8,12,16,20].map(n=>(
+              <button key={n} onClick={()=>setParlayLegs(n)} style={{flex:1,padding:"10px 0",borderRadius:8,fontSize:15,fontWeight:parlayLegs===n?800:600,fontFamily:"'IBM Plex Mono'",cursor:"pointer",
+                background:parlayLegs===n?"var(--acc)":"var(--s2)",color:parlayLegs===n?"#fff":"var(--m)",
+                border:parlayLegs===n?"none":"1px solid var(--b)",transition:"all 0.15s"}}>
+                {n}
+              </button>
+            ))}
+          </div>
+
+          {/* Mode */}
+          <div style={{fontSize:12,fontWeight:700,color:"var(--m)",marginBottom:8,letterSpacing:0.3}}>MODE</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+            {[
+              {id:"auto",label:"AI-Powered",sub:"Claude analyzes every pick"},
+              {id:"local",label:"Instant",sub:"Model engine only, no wait"},
+            ].map(m=>(
+              <div key={m.id} onClick={()=>setParlayType(m.id)} style={{padding:"12px",borderRadius:8,cursor:"pointer",textAlign:"center",
+                background:parlayType===m.id?"rgba(20,147,255,0.08)":"var(--s2)",
+                border:parlayType===m.id?"1px solid var(--acc)":"1px solid var(--b)",transition:"all 0.15s"}}>
+                <div style={{fontSize:13,fontWeight:700,color:parlayType===m.id?"var(--acc)":"#fff"}}>{m.label}</div>
+                <div style={{fontSize:11,color:"var(--m)",marginTop:2}}>{m.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Bet Types */}
+          <div style={{fontSize:12,fontWeight:700,color:"var(--m)",marginBottom:8,letterSpacing:0.3}}>BET TYPES</div>
+          <div style={{display:"flex",gap:6,marginBottom:16}}>
+            {[{id:"ml",label:"Moneyline"},{id:"spread",label:"Spreads"},{id:"total",label:"Totals"}].map(bt=>(
+              <div key={bt.id} onClick={()=>setParlayBetTypes(p=>({...p,[bt.id]:!p[bt.id]}))} style={{flex:1,padding:"10px",borderRadius:8,cursor:"pointer",textAlign:"center",
+                background:parlayBetTypes[bt.id]?"rgba(20,147,255,0.08)":"var(--s2)",
+                border:parlayBetTypes[bt.id]?"1px solid var(--acc)":"1px solid var(--b)",transition:"all 0.15s"}}>
+                <div style={{fontSize:12,fontWeight:700,color:parlayBetTypes[bt.id]?"var(--acc)":"var(--m)"}}>{bt.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Build button */}
+          <button className="btn-green" onClick={buildParlays} disabled={parlayLoading} style={{width:"100%",padding:"14px",borderRadius:8,fontSize:15,fontFamily:"'DM Sans'",cursor:"pointer",letterSpacing:0.2}}>
+            {parlayLoading?"Analyzing matchups...":"Build "+parlayLegs+"-Leg Parlays"}
+          </button>
+        </div>
+
+        {/* Loading state */}
+        {parlayLoading&&(
+          <div className="gl" style={{padding:24,textAlign:"center"}}>
+            <div style={{width:20,height:20,borderRadius:"50%",border:"2px solid var(--b)",borderTopColor:"var(--acc)",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}/>
+            <div style={{fontSize:13,color:"var(--m)"}}>{parlayType==="auto"?"AI is building your parlays...":"Crunching numbers..."}</div>
+          </div>
+        )}
+
+        {/* Generated Parlays */}
+        {parlays&&!parlayLoading&&(
+          <div>
+            {/* Quick summary bar */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}} className="resp-grid3">
+              {Object.entries(parlays).map(([key,p])=>(
+                <div key={key} style={{padding:"10px",borderRadius:8,background:"var(--s)",border:`1px solid ${p.color}25`,textAlign:"center"}}>
+                  <div style={{fontSize:10,fontWeight:700,color:p.color,letterSpacing:0.5}}>{p.tag}</div>
+                  <div className="mn" style={{fontSize:18,fontWeight:900,color:p.color,margin:"2px 0"}}>{p.payout?.american||"—"}</div>
+                  <div style={{fontSize:10,color:"var(--m)"}}>Hit: {p.payout?.hitRate}%</div>
                 </div>
               ))}
             </div>
-            <div className="gl" style={{padding:12}}>
-              <div style={{fontSize:15,fontWeight:700,color:"var(--t2)",marginBottom:6}}>How to read this</div>
-              <div style={{fontSize:13,color:"var(--m)",lineHeight:1.6}}>
-                A positive edge means our model gives a team a higher championship probability than Vegas does — that's where the value is. The bigger the edge, the more "mispriced" the team is. Look for 2%+ edges on teams with strong underlying analytics.
+
+            {/* Detailed parlay cards */}
+            {Object.entries(parlays).map(([key,parlay])=>(
+              <div key={key} className="gl" style={{padding:0,marginBottom:14,overflow:"hidden",borderLeft:`3px solid ${parlay.color}`}}>
+                {/* Card header */}
+                <div style={{padding:"14px 16px",background:`${parlay.color}08`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:15,fontWeight:800,color:"#fff"}}>{parlay.name}</span>
+                      <span style={{fontSize:9,fontWeight:700,color:parlay.color,padding:"2px 6px",borderRadius:3,background:`${parlay.color}20`,letterSpacing:0.5}}>{parlay.tag}</span>
+                    </div>
+                    <div style={{fontSize:11,color:"var(--m)",marginTop:2}}>{parlay.desc}</div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div className="mn" style={{fontSize:22,fontWeight:900,color:parlay.color,lineHeight:1}}>{parlay.payout?.american}</div>
+                    <div style={{fontSize:10,color:"var(--m)",marginTop:2}}>$10 → ${Math.round((parlay.payout?.payout||0)/10+10)}</div>
+                  </div>
+                </div>
+
+                {/* AI Reasoning */}
+                {parlay.aiReasoning&&(
+                  <div style={{padding:"10px 16px",background:"rgba(255,255,255,0.015)",borderBottom:"1px solid var(--b)"}}>
+                    <div style={{fontSize:10,fontWeight:700,color:parlay.color,letterSpacing:0.5,marginBottom:3}}>AI ANALYSIS</div>
+                    <div style={{fontSize:12,color:"var(--t2)",lineHeight:1.5}}>{parlay.aiReasoning}</div>
+                  </div>
+                )}
+
+                {/* Legs */}
+                <div style={{padding:"8px 0"}}>
+                  {parlay.legs?.map((leg,li)=>{
+                    const confColor=leg.winPct>=80?"var(--green)":leg.winPct>=65?"var(--acc)":leg.winPct>=50?"var(--orange)":"var(--red)";
+                    return(
+                      <div key={li} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px",borderBottom:li<parlay.legs.length-1?"1px solid rgba(255,255,255,0.03)":"none"}}>
+                        {/* Leg number */}
+                        <div className="mn" style={{width:20,fontSize:11,fontWeight:700,color:"var(--d)",textAlign:"center",flexShrink:0}}>{li+1}</div>
+                        
+                        {/* Pick info */}
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+                            <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{leg.winner}</span>
+                            <span style={{fontSize:10,color:"var(--d)"}}>{leg.seedW?"("+leg.seedW+")":""}</span>
+                            <span style={{fontSize:11,color:"var(--d)"}}>over</span>
+                            <span style={{fontSize:12,color:"var(--m)"}}>{leg.loser}</span>
+                            <span style={{fontSize:10,color:"var(--d)"}}>{leg.seedL?"("+leg.seedL+")":""}</span>
+                          </div>
+                          {/* Rationale */}
+                          {(leg.aiRationale||leg.note)&&(
+                            <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",marginTop:2,lineHeight:1.3}}>{leg.aiRationale||leg.note}</div>
+                          )}
+                          {/* Tags */}
+                          {leg.tags?.length>0&&(
+                            <div style={{display:"flex",gap:4,marginTop:3,flexWrap:"wrap"}}>
+                              {leg.tags.map((tag,ti)=>(
+                                <span key={ti} style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,
+                                  background:tag.includes("EV")?"rgba(47,189,96,0.12)":tag==="INJURY EDGE"?"rgba(229,69,61,0.1)":tag==="HOT"?"rgba(245,166,35,0.1)":"rgba(255,255,255,0.04)",
+                                  color:tag.includes("EV")?"var(--green)":tag==="INJURY EDGE"?"var(--red)":tag==="HOT"?"var(--orange)":"var(--m)",
+                                  letterSpacing:0.3}}>{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Confidence + live odds */}
+                        <div style={{flexShrink:0,textAlign:"right",minWidth:50}}>
+                          {leg.liveOdds!==null?(
+                            <div>
+                              <div className="mn" style={{fontSize:14,fontWeight:800,color:confColor}}>{leg.liveOdds>0?"+":""}{leg.liveOdds}</div>
+                              <div style={{fontSize:9,color:"var(--m)"}}>{leg.liveBook||""}</div>
+                            </div>
+                          ):(
+                            <div className="mn" style={{fontSize:14,fontWeight:800,color:confColor}}>{leg.winPct}%</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Footer stats */}
+                <div style={{padding:"10px 16px",background:"rgba(255,255,255,0.015)",borderTop:"1px solid var(--b)",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
+                  <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+                    <span style={{fontSize:11,color:"var(--m)"}}>{parlay.legs?.length} legs</span>
+                    <span style={{fontSize:11,color:"var(--m)"}}>Avg: <span className="mn" style={{color:"#fff"}}>{Math.round(parlay.legs?.reduce((a,l)=>a+l.winPct,0)/(parlay.legs?.length||1))}%</span></span>
+                    {parlay.payout?.liveCount>0&&(
+                      <span style={{fontSize:11,color:"var(--green)"}}>{parlay.payout.liveCount}/{parlay.payout.totalLegs} live</span>
+                    )}
+                  </div>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <span style={{fontSize:11,color:"var(--m)"}}>Hit: <span className="mn" style={{color:parlay.color}}>{parlay.payout?.hitRate}%</span></span>
+                    <button onClick={()=>exportParlay(parlay)} className="btn-outline" style={{padding:"4px 10px",borderRadius:5,fontSize:10,fontFamily:"'DM Sans'",cursor:"pointer",whiteSpace:"nowrap"}}>
+                      Export
+                    </button>
+                  </div>
+                </div>
               </div>
+            ))}
+
+            {/* Disclaimer */}
+            <div style={{fontSize:11,color:"var(--d)",textAlign:"center",padding:"8px 0",lineHeight:1.5}}>
+              Parlays are high-risk bets. These are model-generated suggestions, not guarantees. Always bet responsibly.
             </div>
-          </>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!parlays&&!parlayLoading&&(
+          <div className="gl" style={{padding:20,textAlign:"center"}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#fff",marginBottom:8}}>How it works</div>
+            <div style={{fontSize:13,color:"var(--m)",lineHeight:1.6,maxWidth:400,margin:"0 auto"}}>
+              Select leg count, choose AI or Instant mode, and hit Build. The system analyzes all 32 first-round games, calibrates with historical seed upset data, factors in injuries, momentum, and clutch ratings, then generates three optimized parlays at different risk levels.
+            </div>
+          </div>
         )}
       </div>)}
 
@@ -1638,27 +2546,98 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
 
       {/* ═══ LIVE TRACKER TAB ═══ */}
       {tab==="tracker"&&(<div>
-        {/* Web Search Update Button */}
-        <div className="gl fu" style={{padding:20,marginBottom:18,background:"linear-gradient(135deg,rgba(61,214,140,0.03),rgba(74,158,255,0.03))"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+        {/* Score Fetch Controls */}
+        <div className="gl fu" style={{padding:18,marginBottom:14,background:"linear-gradient(135deg,rgba(61,214,140,0.03),rgba(74,158,255,0.03))"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
             <div>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                
-                <span style={{fontSize:15,fontWeight:800,letterSpacing:-0.2}}>Live Tournament Tracker</span>
-              </div>
-              <div style={{fontSize:14,color:"var(--m)",marginTop:5,paddingLeft:11}}>Web-search powered · Manual entry · Auto-scoring</div>
+              <div style={{fontSize:15,fontWeight:800,letterSpacing:-0.2}}>Live Tournament Tracker</div>
+              <div style={{fontSize:12,color:"var(--m)",marginTop:3}}>Scores API + AI search + manual entry</div>
             </div>
-            <button onClick={fetchLatest} disabled={fetchLoading} className={fetchLoading?"btn-outline":"btn-green"} style={{padding:"10px 20px",borderRadius:8,fontSize:13,fontFamily:"'DM Sans'",cursor:"pointer"}}>
-              {fetchLoading?"Searching...":"Fetch Scores →"}
-            </button>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>fetchLiveScores(false)} disabled={fetchLoading} className={fetchLoading?"btn-outline":"btn-green"} style={{padding:"8px 14px",borderRadius:8,fontSize:12,fontFamily:"'DM Sans'",cursor:"pointer"}}>
+                {fetchLoading?"Loading...":"Live Scores"}
+              </button>
+              <button onClick={fetchLatest} disabled={fetchLoading} className="btn-outline" style={{padding:"8px 14px",borderRadius:8,fontSize:12,fontFamily:"'DM Sans'",cursor:"pointer"}}>
+                AI Search
+              </button>
+            </div>
           </div>
-          {fetchMsg&&<div style={{fontSize:13,color:fetchMsg.startsWith("")?"var(--green)":fetchMsg.startsWith("")?"var(--orange)":"var(--m)",padding:"6px 8px",borderRadius:8,background:"rgba(255,255,255,0.02)",lineHeight:1.5}}>{fetchMsg}</div>}
+          
+          {/* Auto-poll toggle */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",borderRadius:6,background:"rgba(255,255,255,0.02)",marginBottom:fetchMsg?10:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div onClick={()=>setAutoPolling(!autoPolling)} style={{width:36,height:20,borderRadius:10,background:autoPolling?"var(--green)":"var(--s3)",cursor:"pointer",transition:"all 0.2s",position:"relative"}}>
+                <div style={{width:16,height:16,borderRadius:8,background:"#fff",position:"absolute",top:2,left:autoPolling?18:2,transition:"all 0.2s"}}/>
+              </div>
+              <span style={{fontSize:12,color:autoPolling?"var(--green)":"var(--m)",fontWeight:600}}>Auto-refresh every 5 min</span>
+            </div>
+            {lastScoreFetch&&<span style={{fontSize:11,color:"var(--d)"}}>Last: {lastScoreFetch.toLocaleTimeString()}</span>}
+          </div>
+          
+          {fetchMsg&&<div style={{fontSize:12,color:"var(--m)",padding:"6px 8px",borderRadius:6,background:"rgba(255,255,255,0.02)",lineHeight:1.5}}>{fetchMsg}</div>}
         </div>
+
+        {/* Live Games In Progress */}
+        {liveScores&&liveScores.filter(g=>!g.completed&&g.scores&&g.scores.length>0).length>0&&(
+          <div className="gl fu" style={{padding:16,marginBottom:14,borderLeft:"3px solid var(--green)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:"var(--green)",animation:"liveDot 1.8s ease-in-out infinite"}}/>
+              <span style={{fontSize:13,fontWeight:700,color:"var(--green)"}}>LIVE NOW</span>
+            </div>
+            {liveScores.filter(g=>!g.completed&&g.scores&&g.scores.length>0).map((game,gi)=>{
+              const s0=parseInt(game.scores?.[0]?.score)||0;
+              const s1=parseInt(game.scores?.[1]?.score)||0;
+              const leading=s0>s1?0:s0<s1?1:-1;
+              return(
+                <div key={gi} style={{padding:"10px 0",borderBottom:gi<liveScores.filter(g=>!g.completed&&g.scores?.length>0).length-1?"1px solid var(--b)":"none"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:14,fontWeight:leading===0?800:500,color:leading===0?"#fff":"var(--m)"}}>{game.home_team}</span>
+                        <span className="mn" style={{fontSize:18,fontWeight:900,color:leading===0?"var(--green)":"var(--m)"}}>{s0}</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
+                        <span style={{fontSize:14,fontWeight:leading===1?800:500,color:leading===1?"#fff":"var(--m)"}}>{game.away_team}</span>
+                        <span className="mn" style={{fontSize:18,fontWeight:900,color:leading===1?"var(--green)":"var(--m)"}}>{s1}</span>
+                      </div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <div className="mn" style={{fontSize:13,color:"var(--orange)",fontWeight:700}}>LIVE</div>
+                      <div style={{fontSize:11,color:"var(--d)"}}>+{Math.abs(s0-s1)} {leading===0?game.home_team?.split(" ").pop():leading===1?game.away_team?.split(" ").pop():"TIE"}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Recent Completed Games (from API) */}
+        {liveScores&&liveScores.filter(g=>g.completed).length>0&&(
+          <div className="gl fu" style={{padding:16,marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:700,color:"var(--m)",marginBottom:10}}>COMPLETED — {liveScores.filter(g=>g.completed).length} games</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:6}}>
+              {liveScores.filter(g=>g.completed).slice(0,16).map((game,gi)=>{
+                const s0=parseInt(game.scores?.[0]?.score)||0;
+                const s1=parseInt(game.scores?.[1]?.score)||0;
+                const winnerName=s0>s1?game.home_team:game.away_team;
+                const loserName=s0>s1?game.away_team:game.home_team;
+                const winScore=Math.max(s0,s1);const loseScore=Math.min(s0,s1);
+                return(
+                  <div key={gi} style={{padding:"8px 10px",borderRadius:6,background:"var(--s2)"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>{winnerName} {winScore}</div>
+                    <div style={{fontSize:11,color:"var(--d)"}}>{loserName} {loseScore}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Bracket Scoreboard */}
         <div className="gl fu" style={{padding:18,marginBottom:20}}>
           <div style={{fontSize:14,fontWeight:700,color:"var(--t2)",marginBottom:20}}>Bracket Scoreboard</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}} className="resp-grid3">
             {brackets.map((b,i)=>{
               const sc=scoreBracket(b.picks);const totalResults=Object.keys(results).length;
               const pct=sc.correct+sc.wrong>0?Math.round(sc.correct/(sc.correct+sc.wrong)*100):0;
@@ -1693,7 +2672,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
             const roundTotal={0:32,1:16,2:8,3:4,4:2,5:1}[i];
             const complete=roundResults>=(roundTotal||0);
             return(
-              <button key={i} onClick={()=>setTrkRound(i)} style={{flex:1,padding:"6px 2px",borderRadius:8,fontSize:15,fontWeight:700,background:trkRound===i?"rgba(255,255,255,0.1)":"transparent",color:trkRound===i?"#fff":"var(--m)",border:complete?`1px solid var(--green)40`:`1px solid var(--b)`,cursor:"pointer",fontFamily:"'DM Sans'",textTransform:"uppercase"}}>
+              <button key={i} onClick={()=>setTrkRound(i)} style={{flex:1,padding:"6px 2px",borderRadius:8,fontSize:11,fontWeight:700,background:trkRound===i?"rgba(255,255,255,0.1)":"transparent",color:trkRound===i?"#fff":"var(--m)",border:complete?`1px solid var(--green)40`:`1px solid var(--b)`,cursor:"pointer",fontFamily:"'DM Sans'",textTransform:"uppercase"}}>
                 {label}<br/>
                 <span className="mn" style={{fontSize:13,color:complete?"var(--green)":"var(--d)"}}>{roundResults}/{roundTotal}</span>
               </button>
