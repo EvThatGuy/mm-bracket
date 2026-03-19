@@ -120,7 +120,7 @@ const CONF_PI={
 };
 
 function getPower(n,boosts){const t=T[n];if(!t)return 0;const b=boosts?.[n]||0;return t.off*0.20+t.def*0.20+t.sos*0.14+t.mom*0.09+t.exp*0.07+t.reb*0.08+t.to*0.05+t.three*0.04+t.bench*0.04+t.clutch*0.05+t.starPIR*0.04+b;}
-function getWP(a,b,boosts){const d=getPower(a,boosts)-getPower(b,boosts);return Math.min(0.98,Math.max(0.02,1/(1+Math.pow(10,-d/22))));}
+function getWP(a,b,boosts){if(a==="TBD"||b==="TBD"||!T[a]||!T[b])return 0.5;const d=getPower(a,boosts)-getPower(b,boosts);return Math.min(0.98,Math.max(0.02,1/(1+Math.pow(10,-d/22))));}
 
 function getStyleClash(a,b){
   const ta=T[a],tb=T[b];if(!ta||!tb)return null;
@@ -614,6 +614,7 @@ export default function App(){
   const [parlayType,setParlayType]=useState("auto");
   const [parlayBetTypes,setParlayBetTypes]=useState("ml");
   const [parlayBook,setParlayBook]=useState("ALL");
+  const [parlayTourneyOnly,setParlayTourneyOnly]=useState(true);
   const [oddsHistory,setOddsHistory]=useState([]);
   const [parlays,setParlays]=useState(null);
   const [parlayLoading,setParlayLoading]=useState(false);
@@ -1198,7 +1199,29 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
         overPt:over?.point||null,overPrice:over?.price||null,underPt:under?.point||null,underPrice:under?.price||null,
         modelConf,modelEdge,modelTags,modelWinPct:modelConf?Math.round(modelConf*100):null};
     }).filter(Boolean);
-    if(parsedGames.length===0){setParlayLoading(false);showToast("No FanDuel/DraftKings lines available.");return;}
+    
+    // Filter to tournament games only if toggle is on
+    const filteredGames=parlayTourneyOnly?parsedGames.filter(g=>{
+      if(!g.homeBracket||!g.awayBracket)return false;
+      // Must be an actual bracket matchup (in MO or First Four)
+      let isMatch=false;
+      Object.values(MO).forEach(matchups=>{
+        matchups.forEach(([a,b])=>{
+          if((a===g.homeBracket&&b===g.awayBracket)||(a===g.awayBracket&&b===g.homeBracket))isMatch=true;
+        });
+      });
+      // Also check First Four
+      FIRST_FOUR.forEach(ff=>{
+        if((ff.a===g.homeBracket&&ff.b===g.awayBracket)||(ff.a===g.awayBracket&&ff.b===g.homeBracket))isMatch=true;
+      });
+      return isMatch;
+    }):parsedGames;
+    
+    if(filteredGames.length===0){
+      setParlayLoading(false);
+      showToast(parlayTourneyOnly?"No tournament game lines posted yet. Toggle to 'All NCAAB' or try closer to tip-off.":"No games available.");
+      return;
+    }
     
     // Step 3: Build legs from REAL sportsbook data only — conf from implied probability
     const buildLegs=(games,betType)=>{
@@ -1237,7 +1260,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
       });
       return legs;
     };
-    const allLegs=buildLegs(parsedGames,parlayBetTypes);
+    const allLegs=buildLegs(filteredGames,parlayBetTypes);
     if(allLegs.length===0){setParlayLoading(false);showToast(`No ${parlayBetTypes} lines available from sportsbooks.`);return;}
     
     const dedupe=(legs)=>{const seen=new Set();return legs.filter(l=>{if(seen.has(l.id))return false;seen.add(l.id);return true;});};
@@ -1354,7 +1377,7 @@ EXACTLY ${parlayLegs} legs per parlay. Only games from the list above.`;
     }
     setParlays(localParlays);
     setParlayLoading(false);
-  },[parlayLegs,parlayType,parlayBetTypes,parlayBook,boosts,liveOdds,showToast]);
+  },[parlayLegs,parlayType,parlayBetTypes,parlayBook,parlayTourneyOnly,boosts,liveOdds,showToast]);
 
   const pick=useCallback((key,team)=>{
     const nb=[...brackets];const p={...nb[bIdx].picks,[key]:team};
@@ -1639,7 +1662,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                           <div style={{fontSize:14,color:"var(--m)"}}>{margins[team]?.wins?.length||0}W</div>
                         </div>
                         <div className="mn" style={{fontSize:15,fontWeight:700,color:boost>0?"var(--green)":"var(--red)"}}>
-                          {boost>0?"+":""}{boost.toFixed(1)}
+                          {boost>0?"+":""}{(boost||0).toFixed(1)}
                         </div>
                       </div>
                     );
@@ -1935,7 +1958,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               <span className="mn" style={{fontSize:14,color:"var(--d)"}}>{simR.n.toLocaleString()} sims</span>
             </div>
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={simR.ch.slice(0,12).map(([n,c])=>({name:n.length>11?n.slice(0,10)+"…":n,pct:+(c/simR.n*100).toFixed(1)}))} layout="vertical" margin={{left:0,right:35}}>
+              <BarChart data={simR.ch.slice(0,12).map(([n,c])=>({name:n.length>11?n.slice(0,10)+"…":n,pct:+((c/simR.n*100)||0).toFixed(1)}))} layout="vertical" margin={{left:0,right:35}}>
                 <XAxis type="number" tick={{fill:"rgba(140,160,200,0.35)",fontSize:26,fontFamily:"IBM Plex Mono"}} tickFormatter={v=>`${v}%`}/>
                 <YAxis type="category" dataKey="name" width={85} tick={{fill:"rgba(180,195,220,0.7)",fontSize:12,fontFamily:"DM Sans"}}/>
                 <Tooltip contentStyle={{background:"var(--s2)",border:"1px solid var(--b2)",borderRadius:8,fontSize:13,fontFamily:"DM Sans",color:"#fff"}} formatter={v=>[`${v}%`,"Win %"]}/>
@@ -1949,7 +1972,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
           <div className="gl fu" style={{padding:18,marginBottom:20}}>
             <div style={{fontSize:14,fontWeight:700,color:"var(--t2)",marginBottom:20}}>Final Four Rates — Top 12</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
-              {simR.f4.slice(0,12).map(([n,c])=>{const t=T[n];const pct=(c/simR.n*100).toFixed(1);
+              {simR.f4.slice(0,12).map(([n,c])=>{const t=T[n];const pct=((c/simR.n*100)||0).toFixed(1);
                 return(<div key={n} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 6px",borderRadius:8,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.04)"}}>
                   <div style={{width:28,height:28,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,background:RC[t.r],color:"#000"}}>{t.s}</div>
                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n}</div><div style={{fontSize:13,color:"var(--m)"}}>{RG[t.r]}</div></div>
@@ -2381,6 +2404,17 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
               <div style={{fontSize:12,color:"var(--orange)",lineHeight:1.5}}>Spread and total lines require live odds data. Hit "Build" and the system will auto-fetch from FanDuel/DraftKings. If the books haven't posted lines for a game, that game won't appear as a spread/total leg.</div>
             </div>
           )}
+
+          {/* Game filter */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,padding:"10px 12px",borderRadius:8,background:"var(--s2)",border:"1px solid var(--b)"}}>
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:"var(--m)",letterSpacing:0.3}}>GAME FILTER</div>
+              <div style={{fontSize:10,color:"var(--d)",marginTop:2}}>{parlayTourneyOnly?"Only NCAA Tournament matchups":"All college basketball games"}</div>
+            </div>
+            <div onClick={()=>setParlayTourneyOnly(!parlayTourneyOnly)} style={{width:40,height:22,borderRadius:11,cursor:"pointer",background:parlayTourneyOnly?"var(--acc)":"rgba(255,255,255,0.1)",transition:"all 0.2s",position:"relative"}}>
+              <div style={{width:18,height:18,borderRadius:9,background:"#fff",position:"absolute",top:2,left:parlayTourneyOnly?20:2,transition:"all 0.2s",boxShadow:"0 1px 3px rgba(0,0,0,0.3)"}}/>
+            </div>
+          </div>
 
           {/* Build button */}
           <button className="btn-green" onClick={buildParlays} disabled={parlayLoading} style={{width:"100%",padding:"14px",borderRadius:8,fontSize:15,fontFamily:"'DM Sans'",cursor:"pointer",letterSpacing:0.2}}>
