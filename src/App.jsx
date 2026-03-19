@@ -1020,10 +1020,12 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
       ctx.fillText(`${i+1}`,20,ly+22);
       // Pick
       ctx.fillStyle="#ffffff";ctx.font="bold 13px 'DM Sans',sans-serif";
-      const pickName=leg.betType==="spread"?`${leg.winner} ${leg.spreadPoint>0?"+":""}${leg.spreadPoint}`:leg.betType==="total"?`${leg.totalSide} ${leg.totalPoint} (${leg.gameA||leg.winner} vs ${leg.gameB||leg.loser})`:leg.winner||"";
+      const wName=leg.winnerBracket||leg.winner||"";
+      const lName=leg.loserBracket||leg.loser||"";
+      const pickName=leg.betType==="spread"?`${wName} ${leg.spreadPoint>0?"+":""}${leg.spreadPoint}`:leg.betType==="total"?`${leg.totalSide} ${leg.totalPoint} (${leg.gameA} vs ${leg.gameB})`:wName;
       ctx.fillText(pickName,42,ly+16);
       ctx.fillStyle="rgba(255,255,255,0.3)";ctx.font="11px 'DM Sans',sans-serif";
-      const subText=leg.betType==="spread"?`vs ${leg.loser}`:leg.betType==="total"?"":(`over ${leg.loser||""}`);
+      const subText=leg.betType==="spread"?`vs ${lName}`:leg.betType==="total"?"":(`over ${lName}`);
       ctx.fillText(subText,42,ly+30);
       // Bet type badge
       if(leg.betType&&leg.betType!=="ml"){
@@ -1233,7 +1235,10 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
           const pick=favHome?g.homeTeam:g.awayTeam;const opp=favHome?g.awayTeam:g.homeTeam;
           const price=favHome?g.homeML:g.awayML;
           const implied=americanToProb(price)||0.5;
+          const wb=favHome?g.homeBracket:g.awayBracket;
+          const lb=favHome?g.awayBracket:g.homeBracket;
           legs.push({...g,betType:"ml",pick,opponent:opp,liveOdds:price,winner:pick,loser:opp,
+            winnerBracket:wb,loserBracket:lb,
             winPct:Math.round(implied*100),conf:implied,
             modelEdge:g.modelEdge||0,tags:g.modelTags||[]});
         }else if(betType==="spread"){
@@ -1242,7 +1247,10 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
           const pick=favHome?g.homeTeam:g.awayTeam;const opp=favHome?g.awayTeam:g.homeTeam;
           const pt=favHome?g.homeSpreadPt:g.awaySpreadPt;const price=favHome?g.homeSpreadPrice:g.awaySpreadPrice;
           const implied=americanToProb(price)||0.5;
+          const wb=favHome?g.homeBracket:g.awayBracket;
+          const lb=favHome?g.awayBracket:g.homeBracket;
           legs.push({...g,betType:"spread",pick,opponent:opp,winner:pick,loser:opp,spreadPoint:pt,liveOdds:price,
+            winnerBracket:wb,loserBracket:lb,
             winPct:Math.round(implied*100),conf:implied,
             tags:[...(g.modelTags||[]).filter(t=>t!=="SPREAD"),"SPREAD"]});
         }else if(betType==="total"){
@@ -1253,8 +1261,10 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
           }
           const pick=isOver?"Over":"Under";const price=isOver?g.overPrice:g.underPrice;
           const implied=americanToProb(price)||0.5;
-          legs.push({...g,betType:"total",pick,opponent:`${g.homeTeam} vs ${g.awayTeam}`,winner:pick,loser:isOver?"Under":"Over",
-            totalPoint:g.overPt,totalSide:pick,liveOdds:price,gameA:g.homeTeam,gameB:g.awayTeam,
+          legs.push({...g,betType:"total",pick,opponent:`${g.homeBracket||g.homeTeam} vs ${g.awayBracket||g.awayTeam}`,
+            winner:pick,loser:isOver?"Under":"Over",
+            totalPoint:g.overPt,totalSide:pick,liveOdds:price,
+            gameA:g.homeBracket||g.homeTeam,gameB:g.awayBracket||g.awayTeam,
             winPct:Math.round(implied*100),conf:implied,tags:["TOTAL"]});
         }
       });
@@ -1276,7 +1286,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
         const impl=l.liveOdds?americanToProb(l.liveOdds):0.5;
         return a*impl;
       },1)*100;
-      const american=combined>=2?`+${Math.round((combined-1)*100)}`:`${Math.round(-100/(combined-1))}`;
+      const american=combined<=1?"—":combined>=2?`+${Math.round((combined-1)*100)}`:`${Math.round(-100/(combined-1))}`;
       return{decimal:combined,american,payout:Math.round((combined-1)*100),hitRate:(hitRate||0).toFixed(3),liveCount:legs.length,totalLegs:legs.length};
     };
 
@@ -1367,9 +1377,18 @@ EXACTLY ${parlayLegs} legs per parlay. Only games from the list above.`;
           if(aiData[key]?.legs){
             localParlays[key].aiReasoning=aiData[key].reasoning;
             localParlays[key].legs=aiData[key].legs.map(l=>{
-              const match=allLegs.find(al=>al.pick===l.pick||al.homeTeam===l.pick||al.awayTeam===l.pick);
-              return match?{...match,aiRationale:l.rationale}:{pick:l.pick,opponent:l.over,betType:parlayBetTypes,liveOdds:null,conf:(l.conf||50)/100,winPct:l.conf||50,aiRationale:l.rationale,tags:[],modelTags:[]};
-            });
+              // Try multiple matching strategies
+              const pick=(l.pick||"").trim();const opp=(l.over||"").trim();
+              const match=allLegs.find(al=>
+                al.pick===pick||al.homeTeam===pick||al.awayTeam===pick||
+                al.pick===opp||al.homeTeam===opp||al.awayTeam===opp||
+                (al.gameA&&(al.gameA===pick||al.gameB===pick||al.gameA===opp||al.gameB===opp))||
+                (al.homeBracket&&(al.homeBracket===pick||al.awayBracket===pick))
+              );
+              // Only include legs with real sportsbook data
+              if(match&&match.liveOdds!==null)return{...match,aiRationale:l.rationale};
+              return null; // Drop legs without real odds
+            }).filter(Boolean);
             localParlays[key].payout=calcPayout(localParlays[key].legs);
           }
         });
@@ -2465,7 +2484,7 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
                     <div className="mn" style={{fontSize:22,fontWeight:900,color:parlay.color,lineHeight:1}}>{parlay.payout?.american}</div>
-                    <div style={{fontSize:10,color:"var(--m)",marginTop:2}}>$10 → ${Math.round((parlay.payout?.payout||0)/10+10)}</div>
+                    <div style={{fontSize:10,color:"var(--m)",marginTop:2}}>{parlay.payout?.payout>0?`$10 → $${Math.round((parlay.payout.payout)/10+10)}`:""}</div>
                   </div>
                 </div>
 
@@ -2500,22 +2519,22 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
                             {/* Spread display */}
                             {leg.betType==="spread"?(
                               <>
-                                <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{leg.winner}</span>
+                                <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{leg.winnerBracket||leg.winner}</span>
                                 <span className="mn" style={{fontSize:13,fontWeight:800,color:"#9d7aff"}}>{leg.spreadPoint>0?"+":""}{leg.spreadPoint}</span>
-                                <span style={{fontSize:11,color:"var(--d)"}}>vs {leg.loser}</span>
+                                <span style={{fontSize:11,color:"var(--d)"}}>vs {leg.loserBracket||leg.loser}</span>
                               </>
                             ):leg.betType==="total"?(
                               <>
                                 <span style={{fontSize:13,fontWeight:700,color:"var(--orange)"}}>{leg.totalSide} {leg.totalPoint}</span>
-                                <span style={{fontSize:11,color:"var(--d)"}}>{leg.gameA||leg.winner} vs {leg.gameB||leg.loser}</span>
+                                <span style={{fontSize:11,color:"var(--d)"}}>{leg.gameA} vs {leg.gameB}</span>
                               </>
                             ):(
                               <>
-                                <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{leg.winner}</span>
-                                <span style={{fontSize:10,color:"var(--d)"}}>{leg.seedW?"("+leg.seedW+")":""}</span>
+                                <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>{leg.winnerBracket||leg.winner}</span>
+                                <span style={{fontSize:10,color:"var(--d)"}}>{T[leg.winnerBracket]?"("+T[leg.winnerBracket].s+")":""}</span>
                                 <span style={{fontSize:11,color:"var(--d)"}}>over</span>
-                                <span style={{fontSize:12,color:"var(--m)"}}>{leg.loser}</span>
-                                <span style={{fontSize:10,color:"var(--d)"}}>{leg.seedL?"("+leg.seedL+")":""}</span>
+                                <span style={{fontSize:12,color:"var(--m)"}}>{leg.loserBracket||leg.loser}</span>
+                                <span style={{fontSize:10,color:"var(--d)"}}>{T[leg.loserBracket]?"("+T[leg.loserBracket].s+")":""}</span>
                               </>
                             )}
                           </div>
