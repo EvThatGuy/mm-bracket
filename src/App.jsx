@@ -10,7 +10,7 @@ import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarC
    clutch = late-game performance rating
    starPIR = star player impact rating (0-100)
    ══════════════════════════════════════════════════════════════ */
-const T={
+const T_MENS={
 "Duke":{s:1,r:"E",rec:"32-2",c:"ACC",off:96,def:97,exp:78,mom:95,sos:92,reb:88,to:85,three:76,ft:81,bench:80,tempo:72,style:"balanced",defStyle:"man",clutch:92,starPIR:97,star:"Cameron Boozer",starLine:"18.4p/8.2r/3.1a",inj:"",coach:"Jon Scheyer",vegasOdds:"+333",vegasImpl:23.1,note:"No.1 overall, Boozer top-3 NBA pick, best KenPom"},
 "Siena":{s:16,r:"E",rec:"23-11",c:"MAAC",off:42,def:38,exp:55,mom:60,sos:18,reb:42,to:55,three:58,ft:68,bench:50,tempo:65,style:"perimeter",defStyle:"zone",clutch:50,starPIR:30,star:"",starLine:"",inj:"",coach:"C. Maciariello",vegasOdds:"",vegasImpl:0.2,note:"MAAC champ"},
 "Ohio State":{s:8,r:"E",rec:"21-12",c:"Big Ten",off:68,def:70,exp:72,mom:62,sos:82,reb:72,to:65,three:63,ft:74,bench:70,tempo:68,style:"balanced",defStyle:"man",clutch:60,starPIR:52,star:"",starLine:"",inj:"",coach:"Jake Diebler",vegasOdds:"+8000",vegasImpl:1.2,note:"Big Ten defense, solid"},
@@ -85,20 +85,113 @@ const T={
 "TBD":{s:16,r:"",rec:"",c:"First Four",off:50,def:50,exp:50,mom:50,sos:20,reb:50,to:50,three:50,ft:50,bench:50,tempo:65,style:"balanced",defStyle:"man",clutch:50,starPIR:20,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"Pending First Four result"},
 };
 
-const RG={E:"East",W:"West",S:"South",MW:"Midwest"};
-const RC={E:"#1493ff",W:"#2fbd60",S:"#e5453d",MW:"#f5a623"};
+const RG_MENS={E:"East",W:"West",S:"South",MW:"Midwest"};
+const RC_MENS={E:"#1493ff",W:"#2fbd60",S:"#e5453d",MW:"#f5a623"};
 /* First Four games — winners advance to R64 */
-const FIRST_FOUR=[
+const FIRST_FOUR_MENS=[
   {game:"FF1",a:"Prairie View",b:"Lehigh",advancesTo:{region:"S",game:0},status:"pending",winner:null},
   {game:"FF2",a:"Texas",b:"NC State",advancesTo:{region:"W",game:4},status:"pending",winner:null},
   {game:"FF3",a:"UMBC",b:"Howard",advancesTo:{region:"MW",game:0},status:"pending",winner:null},
   {game:"FF4",a:"Miami OH",b:"SMU",advancesTo:{region:"MW",game:4},status:"pending",winner:null},
 ];
 // R64 slots that depend on First Four results (team TBD until FF winner is known)
-const FF_PENDING_SLOTS={"S-0-0":["Prairie View","Lehigh"],"W-0-4":["Texas","NC State"],"MW-0-0":["UMBC","Howard"],"MW-0-4":["Miami OH","SMU"]};
+const FF_PENDING_SLOTS_MENS={"S-0-0":["Prairie View","Lehigh"],"W-0-4":["Texas","NC State"],"MW-0-0":["UMBC","Howard"],"MW-0-4":["Miami OH","SMU"]};
 const isFFPending=(rk,gi)=>!!FF_PENDING_SLOTS[`${rk}-0-${gi}`];
 
-const MO={
+/* ══════════════════════════════════════════════════════════════
+   WOMEN'S TEAM DATABASE — 64 teams
+   ══════════════════════════════════════════════════════════════ */
+const T_WOMENS={
+"W-UConn":{s:1,r:"R1",rec:"34-0",c:"Big East",off:95,def:96,exp:82,mom:98,sos:88,reb:88,to:85,three:82,ft:88,bench:85,tempo:78,style:"balanced",defStyle:"man",clutch:95,starPIR:98,star:"Sarah Strong",starLine:"18.5p/7.6r/3.4s",inj:"",coach:"Geno Auriemma",vegasOdds:"-290",vegasImpl:74.4,note:"34-0 defending champs, 50-game win streak"},
+"W-UTSA":{s:16,r:"R1",rec:"22-11",c:"AAC",off:42,def:38,exp:55,mom:60,sos:18,reb:45,to:48,three:52,ft:65,bench:48,tempo:70,style:"balanced",defStyle:"zone",clutch:45,starPIR:22,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"First NCAA appearance"},
+"W-Iowa State":{s:8,r:"R1",rec:"23-10",c:"Big 12",off:68,def:65,exp:72,mom:62,sos:78,reb:65,to:62,three:70,ft:72,bench:65,tempo:68,style:"perimeter",defStyle:"man",clutch:62,starPIR:48,star:"",starLine:"",inj:"",coach:"Bill Fennelly",vegasOdds:"",vegasImpl:0.8,note:"Big 12 tested"},
+"W-Syracuse":{s:9,r:"R1",rec:"22-10",c:"ACC",off:65,def:62,exp:70,mom:65,sos:75,reb:62,to:60,three:68,ft:70,bench:60,tempo:72,style:"fastbreak",defStyle:"zone",clutch:60,starPIR:45,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.7,note:"ACC zone defense"},
+"W-Maryland":{s:5,r:"R1",rec:"25-7",c:"Big Ten",off:74,def:70,exp:74,mom:72,sos:82,reb:72,to:68,three:72,ft:76,bench:70,tempo:74,style:"balanced",defStyle:"man",clutch:68,starPIR:58,star:"",starLine:"",inj:"",coach:"Brenda Frese",vegasOdds:"+3500",vegasImpl:2.8,note:"Big Ten contender"},
+"W-Murray State":{s:12,r:"R1",rec:"28-4",c:"MVC",off:60,def:58,exp:68,mom:78,sos:22,reb:58,to:55,three:65,ft:72,bench:55,tempo:68,style:"balanced",defStyle:"man",clutch:62,starPIR:35,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.3,note:"Back-to-back MVC champs"},
+"W-UNC":{s:4,r:"R1",rec:"27-5",c:"ACC",off:78,def:74,exp:76,mom:75,sos:84,reb:76,to:72,three:74,ft:78,bench:72,tempo:74,style:"balanced",defStyle:"man",clutch:72,starPIR:62,star:"",starLine:"",inj:"",coach:"Courtney Banghart",vegasOdds:"+2000",vegasImpl:4.8,note:"Top 16 host"},
+"W-Western Illinois":{s:13,r:"R1",rec:"24-8",c:"Summit",off:48,def:45,exp:60,mom:65,sos:15,reb:48,to:50,three:55,ft:68,bench:48,tempo:72,style:"fastbreak",defStyle:"man",clutch:48,starPIR:22,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.1,note:"Summit League champ"},
+"W-Notre Dame":{s:6,r:"R1",rec:"24-8",c:"ACC",off:72,def:68,exp:72,mom:68,sos:80,reb:68,to:65,three:72,ft:74,bench:68,tempo:70,style:"balanced",defStyle:"man",clutch:66,starPIR:55,star:"",starLine:"",inj:"",coach:"Niele Ivey",vegasOdds:"+4000",vegasImpl:2.4,note:"ACC contender"},
+"W-Fairfield":{s:11,r:"R1",rec:"26-6",c:"MAAC",off:55,def:52,exp:64,mom:70,sos:25,reb:55,to:58,three:62,ft:72,bench:52,tempo:66,style:"balanced",defStyle:"zone",clutch:58,starPIR:30,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.2,note:"MAAC champ"},
+"W-Ohio State":{s:3,r:"R1",rec:"28-4",c:"Big Ten",off:80,def:78,exp:78,mom:78,sos:86,reb:78,to:74,three:76,ft:80,bench:75,tempo:72,style:"balanced",defStyle:"man",clutch:76,starPIR:68,star:"",starLine:"",inj:"",coach:"Kevin McGuff",vegasOdds:"+1400",vegasImpl:6.7,note:"Top 16 seed"},
+"W-Howard":{s:14,r:"R1",rec:"22-10",c:"MEAC",off:50,def:48,exp:62,mom:68,sos:20,reb:50,to:52,three:58,ft:68,bench:50,tempo:74,style:"fastbreak",defStyle:"man",clutch:52,starPIR:28,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.1,note:"MEAC champ"},
+"W-Illinois":{s:7,r:"R1",rec:"23-9",c:"Big Ten",off:70,def:66,exp:70,mom:65,sos:80,reb:66,to:62,three:70,ft:74,bench:64,tempo:72,style:"perimeter",defStyle:"man",clutch:62,starPIR:48,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:1.5,note:"Big Ten contender"},
+"W-Colorado":{s:10,r:"R1",rec:"21-11",c:"Big 12",off:66,def:64,exp:68,mom:62,sos:76,reb:64,to:60,three:68,ft:72,bench:62,tempo:70,style:"balanced",defStyle:"man",clutch:58,starPIR:42,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.8,note:"Big 12 tested"},
+"W-Vanderbilt":{s:2,r:"R1",rec:"28-5",c:"SEC",off:82,def:78,exp:72,mom:80,sos:86,reb:76,to:72,three:78,ft:80,bench:74,tempo:76,style:"fastbreak",defStyle:"press",clutch:78,starPIR:85,star:"Mikayla Blakes",starLine:"22.1p/4.8a",inj:"",coach:"Shea Ralph",vegasOdds:"+800",vegasImpl:11.1,note:"Program-record season, Blakes is a star"},
+"W-High Point":{s:15,r:"R1",rec:"25-7",c:"Big South",off:52,def:48,exp:60,mom:68,sos:18,reb:50,to:55,three:60,ft:70,bench:50,tempo:68,style:"balanced",defStyle:"man",clutch:52,starPIR:25,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"Big South champ"},
+"W-UCLA":{s:1,r:"R2",rec:"31-1",c:"Big Ten",off:92,def:88,exp:84,mom:95,sos:90,reb:86,to:82,three:80,ft:88,bench:82,tempo:78,style:"inside",defStyle:"man",clutch:90,starPIR:92,star:"Lauren Betts",starLine:"16.4p/8.6r",inj:"",coach:"Cori Close",vegasOdds:"+350",vegasImpl:22.2,note:"31-1, swept Big Ten, 25-game win streak"},
+"W-Cal Baptist":{s:16,r:"R2",rec:"20-13",c:"WAC",off:42,def:40,exp:54,mom:55,sos:15,reb:42,to:48,three:52,ft:62,bench:45,tempo:70,style:"balanced",defStyle:"zone",clutch:42,starPIR:18,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.02,note:"WAC auto-bid"},
+"W-Oklahoma State":{s:8,r:"R2",rec:"22-10",c:"Big 12",off:66,def:64,exp:72,mom:65,sos:78,reb:66,to:60,three:66,ft:72,bench:62,tempo:70,style:"balanced",defStyle:"man",clutch:60,starPIR:45,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.8,note:"Big 12 experience"},
+"W-Princeton":{s:9,r:"R2",rec:"26-3",c:"Ivy",off:68,def:66,exp:74,mom:78,sos:35,reb:62,to:65,three:72,ft:78,bench:58,tempo:64,style:"balanced",defStyle:"man",clutch:68,starPIR:40,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.6,note:"Ivy League champ"},
+"W-Ole Miss":{s:5,r:"R2",rec:"25-8",c:"SEC",off:75,def:72,exp:74,mom:75,sos:84,reb:72,to:68,three:72,ft:76,bench:70,tempo:74,style:"balanced",defStyle:"man",clutch:70,starPIR:58,star:"",starLine:"",inj:"",coach:"",vegasOdds:"+3000",vegasImpl:3.2,note:"SEC contender"},
+"W-Gonzaga":{s:12,r:"R2",rec:"28-4",c:"WCC",off:62,def:60,exp:68,mom:76,sos:30,reb:60,to:58,three:68,ft:74,bench:58,tempo:66,style:"balanced",defStyle:"man",clutch:64,starPIR:38,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.3,note:"WCC champ"},
+"W-Minnesota":{s:4,r:"R2",rec:"26-6",c:"Big Ten",off:76,def:72,exp:74,mom:74,sos:82,reb:74,to:70,three:72,ft:78,bench:72,tempo:72,style:"balanced",defStyle:"man",clutch:70,starPIR:60,star:"",starLine:"",inj:"",coach:"",vegasOdds:"+2500",vegasImpl:3.8,note:"Top 16 seed, host"},
+"W-Green Bay":{s:13,r:"R2",rec:"27-5",c:"Horizon",off:52,def:50,exp:62,mom:72,sos:18,reb:52,to:54,three:58,ft:70,bench:50,tempo:70,style:"fastbreak",defStyle:"man",clutch:55,starPIR:28,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.1,note:"Horizon League champ"},
+"W-Baylor":{s:6,r:"R2",rec:"23-9",c:"Big 12",off:72,def:68,exp:74,mom:68,sos:80,reb:72,to:65,three:68,ft:76,bench:68,tempo:70,style:"inside",defStyle:"man",clutch:66,starPIR:52,star:"",starLine:"",inj:"",coach:"Nicki Collen",vegasOdds:"+4000",vegasImpl:2.4,note:"Big 12 contender"},
+"W-Nebraska":{s:11,r:"R2",rec:"21-13",c:"Big Ten",off:64,def:62,exp:70,mom:68,sos:78,reb:64,to:60,three:66,ft:72,bench:62,tempo:72,style:"balanced",defStyle:"man",clutch:60,starPIR:42,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.4,note:"Won First Four vs Richmond 75-56"},
+"W-Duke":{s:3,r:"R2",rec:"27-5",c:"ACC",off:80,def:76,exp:76,mom:78,sos:84,reb:76,to:72,three:76,ft:80,bench:74,tempo:72,style:"balanced",defStyle:"man",clutch:74,starPIR:65,star:"",starLine:"",inj:"",coach:"Kara Lawson",vegasOdds:"+1600",vegasImpl:5.9,note:"Top 16 host"},
+"W-Charleston":{s:14,r:"R2",rec:"30-3",c:"CAA",off:55,def:52,exp:65,mom:82,sos:22,reb:55,to:58,three:62,ft:74,bench:52,tempo:68,style:"balanced",defStyle:"man",clutch:60,starPIR:32,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.1,note:"First EVER NCAA appearance, 30-3"},
+"W-Texas Tech":{s:7,r:"R2",rec:"25-7",c:"Big 12",off:68,def:64,exp:78,mom:72,sos:78,reb:66,to:62,three:70,ft:74,bench:64,tempo:70,style:"perimeter",defStyle:"man",clutch:64,starPIR:48,star:"Bailey Maupin",starLine:"15.1ppg",inj:"",coach:"Krista Gerlich",vegasOdds:"",vegasImpl:1.2,note:"First tourney since 2013, started 19-0"},
+"W-Villanova":{s:10,r:"R2",rec:"22-10",c:"Big East",off:66,def:64,exp:70,mom:65,sos:72,reb:64,to:62,three:68,ft:72,bench:60,tempo:68,style:"balanced",defStyle:"man",clutch:60,starPIR:42,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.6,note:"Big East contender"},
+"W-LSU":{s:2,r:"R2",rec:"28-5",c:"SEC",off:82,def:76,exp:78,mom:78,sos:86,reb:78,to:70,three:74,ft:80,bench:76,tempo:78,style:"fastbreak",defStyle:"press",clutch:76,starPIR:72,star:"",starLine:"",inj:"",coach:"Kim Mulkey",vegasOdds:"+1000",vegasImpl:9.1,note:"SEC contender, Mulkey pedigree"},
+"W-Jacksonville":{s:15,r:"R2",rec:"24-8",c:"ASUN",off:48,def:45,exp:60,mom:65,sos:16,reb:48,to:52,three:58,ft:68,bench:48,tempo:70,style:"balanced",defStyle:"man",clutch:48,starPIR:22,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"ASUN champ"},
+"W-Texas":{s:1,r:"R3",rec:"30-3",c:"SEC",off:90,def:86,exp:82,mom:90,sos:90,reb:84,to:78,three:78,ft:84,bench:80,tempo:76,style:"balanced",defStyle:"man",clutch:88,starPIR:90,star:"Madison Booker",starLine:"18.9p/6.5r",inj:"",coach:"Vic Schaefer",vegasOdds:"+400",vegasImpl:20.0,note:"SEC tourney champs, beat South Carolina, 8-game streak"},
+"W-Missouri State":{s:16,r:"R3",rec:"23-11",c:"MVC",off:55,def:50,exp:62,mom:72,sos:20,reb:55,to:55,three:60,ft:70,bench:55,tempo:74,style:"fastbreak",defStyle:"man",clutch:58,starPIR:30,star:"Kaemyn Bekemeier",starLine:"22p/13r (FF)",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"Won First Four 85-75 vs SFA"},
+"W-Oregon":{s:8,r:"R3",rec:"22-10",c:"Big Ten",off:68,def:66,exp:72,mom:65,sos:80,reb:66,to:62,three:70,ft:74,bench:64,tempo:72,style:"balanced",defStyle:"man",clutch:62,starPIR:48,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.8,note:"Big Ten tested"},
+"W-Virginia Tech":{s:9,r:"R3",rec:"22-10",c:"ACC",off:66,def:64,exp:70,mom:65,sos:78,reb:64,to:60,three:68,ft:72,bench:62,tempo:70,style:"balanced",defStyle:"man",clutch:60,starPIR:45,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.7,note:"ACC experience"},
+"W-Kentucky":{s:5,r:"R3",rec:"24-8",c:"SEC",off:74,def:70,exp:72,mom:70,sos:84,reb:72,to:68,three:70,ft:76,bench:68,tempo:72,style:"balanced",defStyle:"man",clutch:68,starPIR:55,star:"",starLine:"",inj:"",coach:"",vegasOdds:"+3500",vegasImpl:2.8,note:"SEC contender"},
+"W-James Madison":{s:12,r:"R3",rec:"27-5",c:"Sun Belt",off:62,def:60,exp:68,mom:76,sos:28,reb:60,to:58,three:65,ft:74,bench:58,tempo:70,style:"balanced",defStyle:"man",clutch:62,starPIR:35,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.3,note:"Sun Belt champ"},
+"W-West Virginia":{s:4,r:"R3",rec:"26-6",c:"Big 12",off:76,def:74,exp:76,mom:76,sos:82,reb:76,to:72,three:72,ft:78,bench:72,tempo:70,style:"inside",defStyle:"man",clutch:72,starPIR:60,star:"",starLine:"",inj:"",coach:"",vegasOdds:"+2000",vegasImpl:4.8,note:"Top 16 seed, host"},
+"W-Miami OH":{s:13,r:"R3",rec:"26-6",c:"MAC",off:55,def:52,exp:65,mom:75,sos:22,reb:55,to:58,three:62,ft:72,bench:52,tempo:68,style:"balanced",defStyle:"man",clutch:58,starPIR:30,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.1,note:"First appearance since 2008, MAC champ"},
+"W-Alabama":{s:6,r:"R3",rec:"24-8",c:"SEC",off:72,def:68,exp:72,mom:68,sos:84,reb:68,to:65,three:70,ft:74,bench:68,tempo:74,style:"fastbreak",defStyle:"man",clutch:66,starPIR:52,star:"",starLine:"",inj:"",coach:"",vegasOdds:"+4000",vegasImpl:2.4,note:"SEC experience"},
+"W-Rhode Island":{s:11,r:"R3",rec:"27-5",c:"A-10",off:58,def:56,exp:66,mom:75,sos:30,reb:58,to:58,three:64,ft:72,bench:56,tempo:68,style:"balanced",defStyle:"man",clutch:60,starPIR:32,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.2,note:"First appearance since 1996, A-10 champ"},
+"W-Louisville":{s:3,r:"R3",rec:"27-5",c:"ACC",off:80,def:76,exp:78,mom:78,sos:84,reb:78,to:72,three:76,ft:80,bench:74,tempo:72,style:"balanced",defStyle:"press",clutch:76,starPIR:65,star:"",starLine:"",inj:"",coach:"Jeff Walz",vegasOdds:"+1400",vegasImpl:6.7,note:"Top 16 host, ACC contender"},
+"W-Vermont":{s:14,r:"R3",rec:"28-4",c:"AE",off:50,def:48,exp:62,mom:72,sos:16,reb:50,to:55,three:60,ft:72,bench:48,tempo:64,style:"balanced",defStyle:"zone",clutch:55,starPIR:25,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"America East champ"},
+"W-NC State":{s:7,r:"R3",rec:"22-10",c:"ACC",off:70,def:66,exp:74,mom:65,sos:80,reb:68,to:62,three:70,ft:74,bench:64,tempo:70,style:"balanced",defStyle:"man",clutch:64,starPIR:48,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:1.2,note:"ACC veteran squad"},
+"W-Tennessee":{s:10,r:"R3",rec:"18-14",c:"SEC",off:68,def:64,exp:68,mom:35,sos:84,reb:66,to:58,three:62,ft:70,bench:60,tempo:78,style:"fastbreak",defStyle:"press",clutch:52,starPIR:48,star:"",starLine:"",inj:"Whitehorn dismissed",coach:"Kim Caldwell",vegasOdds:"",vegasImpl:0.8,note:"7-game losing streak, 10 of last 12 lost. Volatile."},
+"W-Michigan":{s:2,r:"R3",rec:"27-5",c:"Big Ten",off:82,def:78,exp:78,mom:78,sos:86,reb:78,to:72,three:76,ft:82,bench:76,tempo:74,style:"balanced",defStyle:"man",clutch:76,starPIR:68,star:"",starLine:"",inj:"",coach:"",vegasOdds:"+1200",vegasImpl:7.7,note:"Top 16 host, Big Ten contender"},
+"W-Holy Cross":{s:15,r:"R3",rec:"24-8",c:"Patriot",off:48,def:46,exp:62,mom:70,sos:16,reb:48,to:52,three:58,ft:70,bench:48,tempo:66,style:"balanced",defStyle:"man",clutch:52,starPIR:22,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"Patriot League champ"},
+"W-South Carolina":{s:1,r:"R4",rec:"31-3",c:"SEC",off:88,def:88,exp:80,mom:82,sos:90,reb:86,to:80,three:72,ft:82,bench:82,tempo:72,style:"inside",defStyle:"man",clutch:88,starPIR:88,star:"Joyce Edwards",starLine:"19.6p/6.3r",inj:"Kitts (knee, out)",coach:"Dawn Staley",vegasOdds:"+500",vegasImpl:16.7,note:"6th straight #1 seed, lost SEC final to Texas"},
+"W-Southern":{s:16,r:"R4",rec:"22-12",c:"SWAC",off:48,def:45,exp:58,mom:68,sos:14,reb:48,to:50,three:55,ft:68,bench:48,tempo:76,style:"fastbreak",defStyle:"press",clutch:55,starPIR:24,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.02,note:"Won First Four 65-53 vs Samford"},
+"W-Clemson":{s:8,r:"R4",rec:"22-10",c:"ACC",off:68,def:66,exp:72,mom:68,sos:78,reb:66,to:62,three:68,ft:74,bench:64,tempo:68,style:"balanced",defStyle:"man",clutch:62,starPIR:45,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.8,note:"ACC experience"},
+"W-USC":{s:9,r:"R4",rec:"22-10",c:"Big Ten",off:66,def:64,exp:68,mom:62,sos:80,reb:64,to:60,three:68,ft:72,bench:62,tempo:72,style:"balanced",defStyle:"man",clutch:60,starPIR:45,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.7,note:"Big Ten first year"},
+"W-Michigan State":{s:5,r:"R4",rec:"25-7",c:"Big Ten",off:74,def:70,exp:74,mom:72,sos:82,reb:72,to:68,three:70,ft:76,bench:70,tempo:72,style:"balanced",defStyle:"man",clutch:68,starPIR:55,star:"",starLine:"",inj:"",coach:"",vegasOdds:"+3000",vegasImpl:3.2,note:"Big Ten contender"},
+"W-Colorado State":{s:12,r:"R4",rec:"27-5",c:"MWC",off:60,def:58,exp:68,mom:76,sos:25,reb:60,to:58,three:65,ft:74,bench:58,tempo:70,style:"balanced",defStyle:"man",clutch:62,starPIR:35,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.3,note:"Mountain West champ"},
+"W-Oklahoma":{s:4,r:"R4",rec:"26-6",c:"SEC",off:76,def:74,exp:76,mom:75,sos:84,reb:74,to:70,three:72,ft:78,bench:72,tempo:72,style:"balanced",defStyle:"man",clutch:72,starPIR:60,star:"",starLine:"",inj:"",coach:"Jennie Baranczyk",vegasOdds:"+2000",vegasImpl:4.8,note:"Top 16 seed, host"},
+"W-Idaho":{s:13,r:"R4",rec:"25-7",c:"Big Sky",off:50,def:48,exp:62,mom:70,sos:18,reb:50,to:55,three:60,ft:70,bench:48,tempo:68,style:"balanced",defStyle:"man",clutch:55,starPIR:25,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.1,note:"Big Sky champ"},
+"W-Washington":{s:6,r:"R4",rec:"23-9",c:"Big Ten",off:70,def:68,exp:72,mom:68,sos:80,reb:68,to:64,three:70,ft:74,bench:66,tempo:72,style:"balanced",defStyle:"man",clutch:64,starPIR:50,star:"",starLine:"",inj:"",coach:"",vegasOdds:"+4000",vegasImpl:2.4,note:"Big Ten first year"},
+"W-South Dakota State":{s:11,r:"R4",rec:"27-5",c:"Summit",off:58,def:56,exp:68,mom:76,sos:22,reb:58,to:58,three:65,ft:74,bench:56,tempo:68,style:"balanced",defStyle:"man",clutch:62,starPIR:35,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.2,note:"Summit League champ"},
+"W-TCU":{s:3,r:"R4",rec:"27-5",c:"Big 12",off:80,def:76,exp:76,mom:78,sos:82,reb:76,to:72,three:76,ft:80,bench:74,tempo:72,style:"balanced",defStyle:"man",clutch:74,starPIR:62,star:"",starLine:"",inj:"",coach:"",vegasOdds:"+1400",vegasImpl:6.7,note:"Top 16 seed, Big 12 contender"},
+"W-UC San Diego":{s:14,r:"R4",rec:"26-6",c:"Big West",off:52,def:50,exp:64,mom:72,sos:20,reb:52,to:55,three:60,ft:72,bench:50,tempo:66,style:"balanced",defStyle:"zone",clutch:55,starPIR:28,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"Big West champ"},
+"W-Georgia":{s:7,r:"R4",rec:"22-10",c:"SEC",off:70,def:66,exp:70,mom:62,sos:84,reb:66,to:62,three:68,ft:72,bench:64,tempo:72,style:"balanced",defStyle:"man",clutch:62,starPIR:48,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:1.2,note:"SEC tested"},
+"W-Virginia":{s:10,r:"R4",rec:"20-13",c:"ACC",off:64,def:62,exp:70,mom:68,sos:78,reb:64,to:60,three:66,ft:72,bench:60,tempo:66,style:"balanced",defStyle:"man",clutch:62,starPIR:42,star:"Kymora Johnson",starLine:"key plays in FF win",inj:"",coach:"",vegasOdds:"",vegasImpl:0.4,note:"Won First Four 57-55 vs Arizona State"},
+"W-Iowa":{s:2,r:"R4",rec:"28-5",c:"Big Ten",off:82,def:76,exp:76,mom:75,sos:86,reb:76,to:72,three:78,ft:82,bench:74,tempo:76,style:"perimeter",defStyle:"man",clutch:74,starPIR:65,star:"",starLine:"",inj:"",coach:"Jan Jensen",vegasOdds:"+1200",vegasImpl:7.7,note:"Big Ten runner-up, efficient offense"},
+"W-Fairleigh Dickinson":{s:15,r:"R4",rec:"28-4",c:"NEC",off:50,def:48,exp:64,mom:82,sos:14,reb:50,to:55,three:58,ft:72,bench:50,tempo:68,style:"balanced",defStyle:"man",clutch:58,starPIR:28,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"22-game win streak, NEC champ"},
+"W-TBD":{s:16,r:"",rec:"",c:"First Four",off:50,def:50,exp:50,mom:50,sos:20,reb:50,to:50,three:50,ft:50,bench:50,tempo:65,style:"balanced",defStyle:"man",clutch:50,starPIR:20,star:"",starLine:"",inj:"",coach:"",vegasOdds:"",vegasImpl:0.05,note:"Pending First Four result"},
+};
+
+const RG_WOMENS={R1:"Fort Worth 1",R2:"Sacramento 2",R3:"Fort Worth 3",R4:"Sacramento 4"};
+const RC_WOMENS={R1:"#c471ed",R2:"#f5a623",R3:"#e5453d",R4:"#2fbd60"};
+
+const MO_WOMENS={
+R1:[["W-UConn","W-UTSA"],["W-Iowa State","W-Syracuse"],["W-Maryland","W-Murray State"],["W-UNC","W-Western Illinois"],["W-Notre Dame","W-Fairfield"],["W-Ohio State","W-Howard"],["W-Illinois","W-Colorado"],["W-Vanderbilt","W-High Point"]],
+R2:[["W-UCLA","W-Cal Baptist"],["W-Oklahoma State","W-Princeton"],["W-Ole Miss","W-Gonzaga"],["W-Minnesota","W-Green Bay"],["W-Baylor","W-Nebraska"],["W-Duke","W-Charleston"],["W-Texas Tech","W-Villanova"],["W-LSU","W-Jacksonville"]],
+R3:[["W-Texas","W-Missouri State"],["W-Oregon","W-Virginia Tech"],["W-Kentucky","W-James Madison"],["W-West Virginia","W-Miami OH"],["W-Alabama","W-Rhode Island"],["W-Louisville","W-Vermont"],["W-NC State","W-Tennessee"],["W-Michigan","W-Holy Cross"]],
+R4:[["W-South Carolina","W-Southern"],["W-Clemson","W-USC"],["W-Michigan State","W-Colorado State"],["W-Oklahoma","W-Idaho"],["W-Washington","W-South Dakota State"],["W-TCU","W-UC San Diego"],["W-Georgia","W-Virginia"],["W-Iowa","W-Fairleigh Dickinson"]],
+};
+
+const FIRST_FOUR_WOMENS=[];
+const FF_PENDING_SLOTS_WOMENS={};
+
+const CONF_PI_WOMENS={
+"SEC":{teams:8,histFF:35,histChamp:7,overSeed:0.90,avgSeedPerf:1.08,note:"South Carolina/Texas/LSU lead deep conference"},
+"Big Ten":{teams:8,histFF:30,histChamp:3,overSeed:0.95,avgSeedPerf:1.03,note:"UCLA/Iowa/Ohio State/Michigan lead"},
+"ACC":{teams:6,histFF:25,histChamp:4,overSeed:1.0,avgSeedPerf:0.98,note:"Duke/Louisville/Notre Dame/NC State"},
+"Big 12":{teams:5,histFF:12,histChamp:2,overSeed:0.92,avgSeedPerf:1.05,note:"Baylor/Iowa State/Oklahoma State/TCU/Texas Tech"},
+"Big East":{teams:2,histFF:22,histChamp:12,overSeed:1.10,avgSeedPerf:0.92,note:"UConn dominates with 12 titles"},
+"WCC":{teams:1,histFF:2,histChamp:0,overSeed:1.15,avgSeedPerf:0.88,note:"Gonzaga only bid"},
+};
+
+const MO_MENS={
 E:[["Duke","Siena"],["Ohio State","TCU"],["St. John's","N. Iowa"],["Kansas","Cal Baptist"],["Louisville","S. Florida"],["Michigan St","N. Dakota St"],["UCLA","UCF"],["UConn","Furman"]],
 W:[["Arizona","LIU"],["Villanova","Utah State"],["Wisconsin","High Point"],["Arkansas","Hawaii"],["BYU","TBD"],["Gonzaga","Kennesaw St"],["Miami FL","Missouri"],["Purdue","Queens NC"]],
 S:[["Florida","TBD"],["Clemson","Iowa"],["Vanderbilt","McNeese"],["Nebraska","Troy"],["UNC","VCU"],["Illinois","Penn"],["Saint Mary's","Texas A&M"],["Houston","Idaho"]],
@@ -106,7 +199,7 @@ MW:[["Michigan","TBD"],["Georgia","Saint Louis"],["Texas Tech","Akron"],["Alabam
 };
 
 /* Conference Power Index — historical tourney performance */
-const CONF_PI={
+const CONF_PI_MENS={
 "SEC":{teams:10,histFF:48,histChamp:12,overSeed:0.92,avgSeedPerf:1.08,note:"Deepest conf ever with 10 bids"},
 "Big Ten":{teams:9,histFF:42,histChamp:8,overSeed:0.95,avgSeedPerf:1.05,note:"9 teams, historically performs to seed"},
 "ACC":{teams:8,histFF:65,histChamp:18,overSeed:1.02,avgSeedPerf:0.98,note:"8 bids, Duke/UVA carry, depth is soft"},
@@ -477,6 +570,17 @@ export default function App(){
   const [authLoading,setAuthLoading]=useState(false);
   const [authError,setAuthError]=useState("");
   const [authPw,setAuthPw]=useState("");
+  // ═══ TOURNAMENT TOGGLE ═══
+  const [tournament,setTournament]=useState("mens");
+  const T=tournament==="mens"?T_MENS:T_WOMENS;
+  const MO=tournament==="mens"?MO_MENS:MO_WOMENS;
+  const RG=tournament==="mens"?RG_MENS:RG_WOMENS;
+  const RC=tournament==="mens"?RC_MENS:RC_WOMENS;
+  const FIRST_FOUR=tournament==="mens"?FIRST_FOUR_MENS:FIRST_FOUR_WOMENS;
+  const FF_PENDING_SLOTS=tournament==="mens"?FF_PENDING_SLOTS_MENS:FF_PENDING_SLOTS_WOMENS;
+  const CONF_PI=tournament==="mens"?CONF_PI_MENS:CONF_PI_WOMENS;
+  const SPORT_KEY=tournament==="mens"?"basketball_ncaab":"basketball_wncaab";
+
 
   const doLogin=async()=>{
     if(!authPw.trim())return;
@@ -502,7 +606,7 @@ export default function App(){
         <style>{CSS}</style>
         <div style={{width:"100%",maxWidth:380,textAlign:"center"}}>
           <div style={{fontSize:28,fontWeight:800,color:"#fff",letterSpacing:-0.5,marginBottom:4}}>March Madness</div>
-          <div style={{fontSize:13,color:"rgba(255,255,255,0.4)",marginBottom:32}}>2026 NCAA Tournament Bracket Intelligence</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,0.4)",marginBottom:32}}>{tournament==="mens"?"2026 NCAA Men's Tournament":"2026 NCAA Women's Tournament"}</div>
           <div style={{background:"#171b26",border:"1px solid rgba(255,255,255,0.06)",borderRadius:12,padding:28}}>
             <div style={{fontSize:15,fontWeight:700,color:"#fff",marginBottom:16}}>Enter Password</div>
             <input
@@ -575,7 +679,54 @@ export default function App(){
     "Iowa State Cyclones":"Iowa State","Tennessee State Tigers":"Tenn. State","Tennessee St Tigers":"Tenn. State",
   };
   // Reverse map for display: bracket name → possible API names
-  const resolveAPIName=(apiName)=>API_TEAM_MAP[apiName]||null;
+  
+  // Women's API team name mappings
+  const API_TEAM_MAP_WOMENS={
+    "UConn Huskies":"W-UConn","Connecticut Huskies":"W-UConn",
+    "UTSA Roadrunners":"W-UTSA",
+    "Iowa State Cyclones":"W-Iowa State","Syracuse Orange":"W-Syracuse",
+    "Maryland Terrapins":"W-Maryland","Murray State Racers":"W-Murray State",
+    "North Carolina Tar Heels":"W-UNC","UNC Tar Heels":"W-UNC",
+    "Western Illinois Leathernecks":"W-Western Illinois",
+    "Notre Dame Fighting Irish":"W-Notre Dame","Fairfield Stags":"W-Fairfield",
+    "Ohio State Buckeyes":"W-Ohio State","Howard Bison":"W-Howard",
+    "Illinois Fighting Illini":"W-Illinois","Colorado Buffaloes":"W-Colorado",
+    "Vanderbilt Commodores":"W-Vanderbilt","High Point Panthers":"W-High Point",
+    "UCLA Bruins":"W-UCLA","California Baptist Lancers":"W-Cal Baptist","Cal Baptist Lancers":"W-Cal Baptist",
+    "Oklahoma State Cowgirls":"W-Oklahoma State","Oklahoma St Cowgirls":"W-Oklahoma State",
+    "Princeton Tigers":"W-Princeton",
+    "Ole Miss Rebels":"W-Ole Miss","Mississippi Rebels":"W-Ole Miss",
+    "Gonzaga Bulldogs":"W-Gonzaga",
+    "Minnesota Golden Gophers":"W-Minnesota","Green Bay Phoenix":"W-Green Bay",
+    "Baylor Bears":"W-Baylor","Nebraska Cornhuskers":"W-Nebraska",
+    "Duke Blue Devils":"W-Duke","Charleston Cougars":"W-Charleston",
+    "Texas Tech Lady Raiders":"W-Texas Tech","Texas Tech Red Raiders":"W-Texas Tech",
+    "Villanova Wildcats":"W-Villanova",
+    "LSU Tigers":"W-LSU","Louisiana State Tigers":"W-LSU",
+    "Jacksonville Dolphins":"W-Jacksonville",
+    "Texas Longhorns":"W-Texas","Missouri State Bears":"W-Missouri State","Missouri St Bears":"W-Missouri State",
+    "Oregon Ducks":"W-Oregon","Virginia Tech Hokies":"W-Virginia Tech",
+    "Kentucky Wildcats":"W-Kentucky","James Madison Dukes":"W-James Madison",
+    "West Virginia Mountaineers":"W-West Virginia","Miami (OH) RedHawks":"W-Miami OH","Miami Ohio RedHawks":"W-Miami OH",
+    "Alabama Crimson Tide":"W-Alabama","Rhode Island Rams":"W-Rhode Island",
+    "Louisville Cardinals":"W-Louisville","Vermont Catamounts":"W-Vermont",
+    "NC State Wolfpack":"W-NC State","Tennessee Lady Volunteers":"W-Tennessee","Tennessee Volunteers":"W-Tennessee",
+    "Michigan Wolverines":"W-Michigan","Holy Cross Crusaders":"W-Holy Cross",
+    "South Carolina Gamecocks":"W-South Carolina","Southern Jaguars":"W-Southern","Southern U Jaguars":"W-Southern",
+    "Clemson Tigers":"W-Clemson","USC Trojans":"W-USC",
+    "Michigan State Spartans":"W-Michigan State","Michigan St Spartans":"W-Michigan State",
+    "Colorado State Rams":"W-Colorado State",
+    "Oklahoma Sooners":"W-Oklahoma","Idaho Vandals":"W-Idaho",
+    "Washington Huskies":"W-Washington","South Dakota State Jackrabbits":"W-South Dakota State","South Dakota St Jackrabbits":"W-South Dakota State",
+    "TCU Horned Frogs":"W-TCU","UC San Diego Tritons":"W-UC San Diego",
+    "Georgia Bulldogs":"W-Georgia","Georgia Lady Bulldogs":"W-Georgia",
+    "Virginia Cavaliers":"W-Virginia",
+    "Iowa Hawkeyes":"W-Iowa","Fairleigh Dickinson Knights":"W-Fairleigh Dickinson",
+  };
+  const resolveAPIName=(apiName)=>{
+    const map=tournament==="mens"?API_TEAM_MAP:API_TEAM_MAP_WOMENS;
+    return map[apiName]||null;
+  };
   const [tab,setTab]=useState("brief");
   const [reg,setReg]=useState("E");
   const [sim,setSim]=useState(null);
@@ -823,7 +974,7 @@ Respond ONLY with JSON (no backticks):
   const fetchLiveScores=useCallback(async(silent=false)=>{
     if(!silent){setFetchLoading(true);setFetchMsg("Fetching live scores...");}
     try{
-      const res=await fetch("/api/scores?sport=basketball_ncaab&daysFrom=3");
+      const res=await fetch(`/api/scores?sport=${SPORT_KEY}&daysFrom=3`);
       const data=await res.json();
       if(data.scores&&Array.isArray(data.scores)){
         setLiveScores(data.scores);
@@ -1067,7 +1218,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
   const fetchLiveOdds=useCallback(async()=>{
     setOddsLoading(true);
     try{
-      const res=await fetch("/api/odds?sport=basketball_ncaab&markets=h2h,spreads,totals&regions=us");
+      const res=await fetch(`/api/odds?sport=${SPORT_KEY}&markets=h2h,spreads,totals&regions=us`);
       const data=await res.json();
       if(data.odds&&Array.isArray(data.odds)){
         // Parse odds into a usable format
@@ -1152,7 +1303,7 @@ If the tournament hasn't started yet, return status "pre_tournament" with empty 
     // Step 1: ALWAYS fetch fresh from the API — source of truth
     let rawGames=[];
     try{
-      const res=await fetch("/api/odds?sport=basketball_ncaab&markets=h2h,spreads,totals&regions=us");
+      const res=await fetch(`/api/odds?sport=${SPORT_KEY}&markets=h2h,spreads,totals&regions=us`);
       const data=await res.json();
       if(data.odds&&Array.isArray(data.odds)){rawGames=data.odds;if(data.usage)setOddsUsage(data.usage);}
     }catch(e){
@@ -1396,7 +1547,7 @@ EXACTLY ${parlayLegs} legs per parlay. Only games from the list above.`;
     }
     setParlays(localParlays);
     setParlayLoading(false);
-  },[parlayLegs,parlayType,parlayBetTypes,parlayBook,parlayTourneyOnly,boosts,liveOdds,showToast]);
+  },[parlayLegs,parlayType,parlayBetTypes,parlayBook,parlayTourneyOnly,tournament,boosts,liveOdds,showToast]);
 
   const pick=useCallback((key,team)=>{
     const nb=[...brackets];const p={...nb[bIdx].picks,[key]:team};
@@ -1478,12 +1629,19 @@ Respond ONLY with JSON (no backticks): {"winner":"team name","winPct":number,"ke
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
               <div style={{fontSize:24,fontWeight:800,letterSpacing:-0.4,color:"#fff"}}>March Madness</div>
-              <div style={{fontSize:13,color:"var(--m)",marginTop:1,fontWeight:500}}>2026 NCAA Tournament Bracket Intelligence</div>
+              <div style={{fontSize:13,color:"var(--m)",marginTop:1,fontWeight:500}}>{tournament==="mens"?"2026 NCAA Men's Tournament":"2026 NCAA Women's Tournament"}</div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",borderRadius:8,background:"rgba(47,189,96,0.06)",border:"1px solid rgba(47,189,96,0.15)",animation:"liveGlow 1.8s ease-in-out infinite"}}>
                 <div style={{width:9,height:9,borderRadius:"50%",background:"var(--green)",boxShadow:"0 0 6px var(--green), 0 0 12px rgba(47,189,96,0.4)",animation:"liveDot 1.8s ease-in-out infinite"}}/>
                 <span style={{fontSize:12,color:"var(--green)",fontWeight:700,letterSpacing:1,animation:"liveText 1.8s ease-in-out infinite"}}>LIVE</span>
+              </div>
+              {/* Tournament Toggle */}
+              <div style={{display:"flex",borderRadius:6,overflow:"hidden",border:"1px solid var(--b)"}}>
+                <div onClick={()=>setTournament("mens")} style={{padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700,
+                  background:tournament==="mens"?"var(--acc)":"transparent",color:tournament==="mens"?"#fff":"var(--m)",transition:"all 0.15s"}}>MEN</div>
+                <div onClick={()=>setTournament("womens")} style={{padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700,
+                  background:tournament==="womens"?"#c471ed":"transparent",color:tournament==="womens"?"#fff":"var(--m)",transition:"all 0.15s"}}>WOMEN</div>
               </div>
               <div onClick={()=>{try{localStorage.removeItem("mm26-auth");}catch(e){}window.location.reload();}} style={{padding:"6px 10px",borderRadius:6,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.06)"}}>
                 <span style={{fontSize:10,color:"var(--m)",fontWeight:600}}>Logout</span>
