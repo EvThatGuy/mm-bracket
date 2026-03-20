@@ -96,7 +96,6 @@ const FIRST_FOUR_MENS=[
 ];
 // R64 slots that depend on First Four results (team TBD until FF winner is known)
 const FF_PENDING_SLOTS_MENS={"S-0-0":["Prairie View","Lehigh"],"W-0-4":["Texas","NC State"],"MW-0-0":["UMBC","Howard"],"MW-0-4":["Miami OH","SMU"]};
-const isFFPending=(rk,gi)=>!!FF_PENDING_SLOTS[`${rk}-0-${gi}`];
 
 /* ══════════════════════════════════════════════════════════════
    WOMEN'S TEAM DATABASE — 64 teams
@@ -211,6 +210,10 @@ const CONF_PI_MENS={
 "MVC":{teams:1,histFF:5,histChamp:0,overSeed:0.95,avgSeedPerf:1.02,note:"Classic Cinderella factory"},
 "MWC":{teams:1,histFF:3,histChamp:0,overSeed:0.98,avgSeedPerf:1.0,note:"Utah State as 9 is about right"},
 };
+
+/* Active tournament data — mutable, switched by component */
+let T=T_MENS,MO=MO_MENS,RG=RG_MENS,RC=RC_MENS,FIRST_FOUR=FIRST_FOUR_MENS,FF_PENDING_SLOTS=FF_PENDING_SLOTS_MENS,CONF_PI=CONF_PI_MENS;
+const isFFPending=(rk,gi)=>!!FF_PENDING_SLOTS[`${rk}-0-${gi}`];
 
 function getPower(n,boosts){const t=T[n];if(!t)return 0;const b=boosts?.[n]||0;return t.off*0.20+t.def*0.20+t.sos*0.14+t.mom*0.09+t.exp*0.07+t.reb*0.08+t.to*0.05+t.three*0.04+t.bench*0.04+t.clutch*0.05+t.starPIR*0.04+b;}
 function getWP(a,b,boosts){if(a==="TBD"||b==="TBD"||!T[a]||!T[b])return 0.5;const d=getPower(a,boosts)-getPower(b,boosts);return Math.min(0.98,Math.max(0.02,1/(1+Math.pow(10,-d/22))));}
@@ -572,13 +575,14 @@ export default function App(){
   const [authPw,setAuthPw]=useState("");
   // ═══ TOURNAMENT TOGGLE ═══
   const [tournament,setTournament]=useState("mens");
-  const T=tournament==="mens"?T_MENS:T_WOMENS;
-  const MO=tournament==="mens"?MO_MENS:MO_WOMENS;
-  const RG=tournament==="mens"?RG_MENS:RG_WOMENS;
-  const RC=tournament==="mens"?RC_MENS:RC_WOMENS;
-  const FIRST_FOUR=tournament==="mens"?FIRST_FOUR_MENS:FIRST_FOUR_WOMENS;
-  const FF_PENDING_SLOTS=tournament==="mens"?FF_PENDING_SLOTS_MENS:FF_PENDING_SLOTS_WOMENS;
-  const CONF_PI=tournament==="mens"?CONF_PI_MENS:CONF_PI_WOMENS;
+  // Switch active tournament data (updates module-level vars used by all functions)
+  T=tournament==="mens"?T_MENS:T_WOMENS;
+  MO=tournament==="mens"?MO_MENS:MO_WOMENS;
+  RG=tournament==="mens"?RG_MENS:RG_WOMENS;
+  RC=tournament==="mens"?RC_MENS:RC_WOMENS;
+  FIRST_FOUR=tournament==="mens"?FIRST_FOUR_MENS:FIRST_FOUR_WOMENS;
+  FF_PENDING_SLOTS=tournament==="mens"?FF_PENDING_SLOTS_MENS:FF_PENDING_SLOTS_WOMENS;
+  CONF_PI=tournament==="mens"?CONF_PI_MENS:CONF_PI_WOMENS;
   const SPORT_KEY=tournament==="mens"?"basketball_ncaab":"basketball_wncaab";
 
 
